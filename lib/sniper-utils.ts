@@ -1,8 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { connectToDatabase } from '../../../mongodb'
-import { mockTokens, mockSwaps } from '../../../mock-data'
+// Shared sniper detection and PnL logic for both global and per-token APIs
 
-function groupBy<T>(arr: T[], keyFn: (item: T) => string) {
+export function groupBy<T>(arr: T[], keyFn: (item: T) => string) {
   return arr.reduce((acc, item) => {
     const key = keyFn(item)?.toLowerCase?.() ?? ''
     if (!acc[key]) acc[key] = []
@@ -11,7 +9,7 @@ function groupBy<T>(arr: T[], keyFn: (item: T) => string) {
   }, {} as Record<string, T[]>)
 }
 
-function toTimestamp(tx: any) {
+export function toTimestamp(tx: any) {
   return tx.timestampReadable
     ? new Date(tx.timestampReadable).getTime()
     : tx.timestamp
@@ -19,48 +17,43 @@ function toTimestamp(tx: any) {
     : 0
 }
 
-function toDate(val: any) {
+export function toDate(val: any) {
   if (!val) return null
   if (typeof val === 'number') return new Date(val * 1000)
   return new Date(val)
 }
 
-function getField(tx: any, field: string, defaultValue = 0) {
+export function getField(tx: any, field: string, defaultValue = 0) {
   const value = tx[field]
   if (value === null || value === undefined || value === '') return defaultValue
   return typeof value === 'number' ? value : (parseFloat(value) || defaultValue)
 }
 
-function normalizeAddress(addr?: string) {
+export function normalizeAddress(addr?: string) {
   return addr?.toLowerCase() ?? ''
 }
 
-function getLatestPrice(swaps: any[], token: string) {
+export function getLatestPrice(swaps: any[], token: string) {
   // Get latest price from all swaps for this token, sorted by timestamp - matching Streamlit
   const allTokenSwaps = swaps.filter(s => s.genesis_token_symbol === token.toUpperCase())
   if (allTokenSwaps.length === 0) return 0
-  
   const latestSwap = allTokenSwaps.sort((a, b) => toTimestamp(b) - toTimestamp(a))[0]
   return getField(latestSwap, 'genesis_usdc_price')
 }
 
-function createChunkedLargeBuys(swaps: any[], token: string) {
+export function createChunkedLargeBuys(swaps: any[], token: string) {
   // Step 1: Filter buys and group by wallet
   const buySwaps = swaps.filter((s) => s.swapType === 'buy')
   const buyGroups = groupBy(buySwaps, (s) => normalizeAddress(s.maker || s.from))
-  
   const chunkedBuys: any[] = []
   const timeThresholdMs = 10 * 60 * 1000 // 10 minutes
-
   for (const [wallet, group] of Object.entries(buyGroups)) {
     const sorted = group.slice().sort((a, b) => toTimestamp(a) - toTimestamp(b))
     let chunk: any[] = []
     let chunkStartTime = 0
     let chunkSum = 0
-
     for (const tx of sorted) {
       const t = toTimestamp(tx)
-      
       if (!chunk.length) {
         chunk = [tx]
         chunkStartTime = t
@@ -79,98 +72,80 @@ function createChunkedLargeBuys(swaps: any[], token: string) {
         chunkSum = getField(tx, `${token}_OUT_BeforeTax`)
       }
     }
-    
     // Process final chunk
     if (chunkSum > 100000) {
       chunkedBuys.push(...chunk)
     }
   }
-
   // Remove duplicates like Streamlit's drop_duplicates()
   const uniqueBuys = chunkedBuys.filter((buy, index, arr) => 
     arr.findIndex(b => b.txHash === buy.txHash) === index
   )
-
   return uniqueBuys
 }
 
-function processSnipers(
+export function processSnipers(
   swaps: any[],
   token: string,
   tokenLaunchBlock: number
 ) {
   // Step 1: Create chunked large buys (>100k tokens in 10min windows)
   const chunkedLargeBuys = createChunkedLargeBuys(swaps, token)
-  
   // Step 2: Filter for high gas transactions
   const GAS_THRESHOLD = 0.000002
   const highGasBuys = chunkedLargeBuys.filter(tx => 
     getField(tx, 'transactionFee') > GAS_THRESHOLD
   )
-  
   // Step 3: Filter for early buys (within 100 blocks of launch)
   const earlyBuys = highGasBuys.filter(tx => 
     Number(tx.blockNumber || 0) <= tokenLaunchBlock + 100
   )
-  
   // Step 4: Find wallets with quick sells (within 20 minutes)
   const QUICK_SELL_THRESHOLD_SEC = 20 * 60
   const sellSwaps = swaps.filter((s) => s.swapType === 'sell')
   const sellGroups = groupBy(sellSwaps, (s) => normalizeAddress(s.maker || s.from))
-  
   const snipersSet = new Set<string>()
-  
   // Group early buys by wallet
   const earlyBuysByWallet = groupBy(earlyBuys, (s) => normalizeAddress(s.maker || s.from))
-  
   for (const [wallet, buyTxs] of Object.entries(earlyBuysByWallet)) {
     const sells = (sellGroups[wallet] || []).map((s) => ({
       timestamp: toTimestamp(s),
       tx: s
     }))
-    
     if (sells.length === 0) continue
-    
     // Check if any buy has a sell within 20 minutes
     for (const buy of buyTxs) {
       const buyTime = toTimestamp(buy)
       const hasQuickSell = sells.some(({ timestamp: sellTime }) => 
         sellTime > buyTime && sellTime - buyTime <= QUICK_SELL_THRESHOLD_SEC * 1000
       )
-      
       if (hasQuickSell) {
         snipersSet.add(wallet)
         break // Once marked as sniper, no need to check other buys for this wallet
       }
     }
   }
-
   // Step 5: Calculate FIFO PnL for identified snipers
   const sniperResults = []
-  const latestPrice = getLatestPrice(swaps, token) // Removed await - this is now synchronous
-  
+  const latestPrice = getLatestPrice(swaps, token)
   for (const wallet of snipersSet) {
     const userSwaps = swaps.filter(
       (s) => normalizeAddress(s.maker || s.from) === wallet
     )
     userSwaps.sort((a, b) => toTimestamp(a) - toTimestamp(b))
-    
     let realizedPnL = 0
     let buyQueue: { amount: number; cost: number; price: number }[] = []
     let buyCount = 0, sellCount = 0, buyTokens = 0, sellTokens = 0
     let buyPriceSum = 0, sellPriceSum = 0, totalTax = 0, totalFees = 0
     let firstBuyTime = null, lastSellTime = null
-    
     const outBeforeTax = `${token}_OUT_BeforeTax`
     const outAfterTax = `${token}_OUT_AfterTax`
     const inBeforeTax = `${token}_IN_BeforeTax`
     const inAfterTax = `${token}_IN_AfterTax`
-    
     for (const tx of userSwaps) {
       totalTax += getField(tx, 'Tax_1pct')
       totalFees += getField(tx, 'transactionFee')
       const price = getField(tx, 'genesis_usdc_price')
-      
       if (tx.swapType === 'buy') {
         buyCount++
         const amt = getField(tx, outAfterTax)
@@ -179,14 +154,12 @@ function processSnipers(
         buyTokens += amt
         buyPriceSum += price
         if (!firstBuyTime) firstBuyTime = toDate(tx.timestampReadable || tx.timestamp)
-        
       } else if (tx.swapType === 'sell') {
         sellCount++
         const amt = getField(tx, inAfterTax)
         sellTokens += amt
         sellPriceSum += price
         lastSellTime = toDate(tx.timestampReadable || tx.timestamp)
-        
         // FIFO realized PnL calculation
         let toMatch = amt
         while (toMatch > 0 && buyQueue.length) {
@@ -199,16 +172,14 @@ function processSnipers(
         }
       }
     }
-    
     const tokensLeft = buyQueue.reduce((sum, b) => sum + b.amount, 0)
     // Match Streamlit's unrealized PnL calculation (total value, not gain/loss)
     const unrealizedPnL = tokensLeft * latestPrice
-    
     sniperResults.push({
       wallet,
-      netPnL: Number(realizedPnL.toFixed(4)),
-      unrealizedPnL: Number(unrealizedPnL.toFixed(4)),
-      tokensLeft: Number(tokensLeft.toFixed(4)),
+      netPnL: Number((realizedPnL ?? 0).toFixed(4)),
+      unrealizedPnL: Number((unrealizedPnL ?? 0).toFixed(4)),
+      tokensLeft: Number((tokensLeft ?? 0).toFixed(4)),
       buyCount,
       sellCount,
       firstBuyTime: firstBuyTime ? new Date(firstBuyTime).toISOString() : null,
@@ -219,45 +190,5 @@ function processSnipers(
       totalFees: Number(totalFees.toFixed(4)),
     })
   }
-  
   return sniperResults
-}
-
-export async function GET(
-  req: NextRequest,
-  { params }: { params: { symbol: string } }
-) {
-  try {
-    const symbol = params.symbol
-    let persona: any = null
-    // Get persona data
-    try {
-      const db = await connectToDatabase('virtualgenesis')
-      persona = await db.collection('personas').findOne({ symbol })
-    } catch (e) {}
-    if (!persona) persona = mockTokens.find((t) => t.symbol === symbol)
-    if (!persona) return NextResponse.json({ error: 'Token not found' }, { status: 404 })
-    // Get swap data
-    let swaps: any[] = []
-    const swapCollection = `${persona.symbol.toLowerCase()}_swap` // Fixed collection name
-    try {
-      const swapDb = await connectToDatabase('genesis_tokens_swap_info')
-      swaps = await swapDb.collection(swapCollection).find({}).toArray()
-      // Get launch block from swap_progress like Streamlit does
-      const swapProgressDoc = await swapDb.collection('swap_progress').findOne({ 
-        token_symbol: symbol.toUpperCase() 
-      })
-      const tokenLaunchBlock = swapProgressDoc?.genesis_block || persona.blockNumber
-      const snipers = processSnipers(swaps, symbol.toUpperCase(), tokenLaunchBlock)
-      return NextResponse.json(snipers)
-    } catch (e) {
-      console.error('Database error:', e)
-    }
-    // Fallback to mock data
-    if (swaps.length === 0) swaps = mockSwaps
-    const snipers = processSnipers(swaps, symbol.toUpperCase(), persona.blockNumber)
-    return NextResponse.json(snipers)
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
-  }
-}
+} 

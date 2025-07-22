@@ -256,3 +256,4 @@ export function SniperInsightsTab({ symbol }: SniperInsightsTabProps) {
     </div>
   )
 }
+

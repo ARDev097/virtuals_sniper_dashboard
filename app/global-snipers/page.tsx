@@ -348,9 +348,9 @@ export default function GlobalSnipersPage() {
                           <TableCell className="text-xs">
                             {sniper.lastTxn ? formatDate(sniper.lastTxn) : "N/A"}
                           </TableCell>
-                          <TableCell className="text-right">${sniper.avgPrice.toFixed(6)}</TableCell>
-                          <TableCell className="text-right">${sniper.totalTax.toFixed(4)}</TableCell>
-                          <TableCell className="text-right">${sniper.totalFees.toFixed(4)}</TableCell>
+                          <TableCell className="text-right">${(sniper.avgPrice ?? 0).toFixed(6)}</TableCell>
+                          <TableCell className="text-right">${(sniper.totalTax ?? 0).toFixed(4)}</TableCell>
+                          <TableCell className="text-right">${(sniper.totalFees ?? 0).toFixed(4)}</TableCell>
                         </TableRow>
                       ))}
               </TableBody>

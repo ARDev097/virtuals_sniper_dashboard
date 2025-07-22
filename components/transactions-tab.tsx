@@ -38,6 +38,8 @@ type NormalizedSwap = {
   transactionFee: number,
   tax: number,
   txVolume: number,
+  tokenBeforeTax: number,
+  tokenAfterTax: number,
   [key: string]: any
 }
 
@@ -109,6 +111,16 @@ function normalizeSwap(swap: RawSwap, symbol: string): NormalizedSwap {
   const buy = swap.swapType === "buy"
   const sell = swap.swapType === "sell"
 
+  // --- Before/After Tax extraction ---
+  let tokenBeforeTax = 0, tokenAfterTax = 0
+  if (buy) {
+    tokenBeforeTax = swap[`${upperSymbol}_OUT_BeforeTax`] ?? 0
+    tokenAfterTax = swap[`${upperSymbol}_OUT_AfterTax`] ?? 0
+  } else if (sell) {
+    tokenBeforeTax = swap[`${upperSymbol}_IN_BeforeTax`] ?? 0
+    tokenAfterTax = swap[`${upperSymbol}_IN_AfterTax`] ?? 0
+  }
+
   let tokenAmount = 0
   if (buy)
     tokenAmount =
@@ -177,6 +189,8 @@ function normalizeSwap(swap: RawSwap, symbol: string): NormalizedSwap {
     genesisVirtualPrice: Number(genesisVirtualPrice),
     transactionFee: Number(swap.transactionFee ?? 0),
     tax,
+    tokenBeforeTax: Number(tokenBeforeTax),
+    tokenAfterTax: Number(tokenAfterTax),
   }
 }
 
@@ -265,13 +279,46 @@ export function TransactionsTab({ symbol }: TransactionsTabProps) {
       isSortable: true,
       render: (row: NormalizedSwap) => row.timeParsed?.toLocaleString() ?? "",
     },
+    // {
+    //   key: "tokenAmount",
+    //   label: tokenUpper,
+    //   // tooltip: `Amount of ${tokenUpper} in this swap`,
+    //   isSortable: true,
+    //   render: (row: NormalizedSwap) =>
+    //     Number(row.tokenAmount ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 }),
+    // },
+    
     {
-      key: "tokenAmount",
-      label: tokenUpper,
-      // tooltip: `Amount of ${tokenUpper} in this swap`,
+      key: "tokenBeforeTax",
+      label: `${tokenUpper} Before Tax`,
       isSortable: true,
-      render: (row: NormalizedSwap) =>
-        Number(row.tokenAmount ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 }),
+      render: (row: NormalizedSwap) => {
+        // If Tax_1pct is 0, show OUT/IN value from DB
+        if (row.tax === 0) {
+          if (row.txTypeRaw === "buy") {
+            return Number(row[`${tokenUpper}_OUT`] ?? 0).toLocaleString(undefined, { maximumFractionDigits: 4 })
+          } else if (row.txTypeRaw === "sell") {
+            return Number(row[`${tokenUpper}_IN`] ?? 0).toLocaleString(undefined, { maximumFractionDigits: 4 })
+          }
+        }
+        return Number(row.tokenBeforeTax ?? 0).toLocaleString(undefined, { maximumFractionDigits: 4 })
+      },
+    },
+    {
+      key: "tokenAfterTax",
+      label: `${tokenUpper} After Tax`,
+      isSortable: true,
+      render: (row: NormalizedSwap) => {
+        // If Tax_1pct is 0, show OUT/IN value from DB
+        if (row.tax === 0) {
+          if (row.txTypeRaw === "buy") {
+            return Number(row[`${tokenUpper}_OUT`] ?? 0).toLocaleString(undefined, { maximumFractionDigits: 4 })
+          } else if (row.txTypeRaw === "sell") {
+            return Number(row[`${tokenUpper}_IN`] ?? 0).toLocaleString(undefined, { maximumFractionDigits: 4 })
+          }
+        }
+        return Number(row.tokenAfterTax ?? 0).toLocaleString(undefined, { maximumFractionDigits: 4 })
+      },
     },
     {
       key: "virtualAmount",
@@ -388,18 +435,26 @@ export function TransactionsTab({ symbol }: TransactionsTabProps) {
     return ["All", ...sTypes]
   }, [swaps])
 
-  // --- KPI calculations (unchanged)
+  // --- KPI calculations (updated for before-tax and label exclusion)
   const { uniqueMakers, buyVolumeUsd, sellVolumeUsd } = useMemo(() => {
     const _makers = swaps.map((s) => s.maker).filter(Boolean)
     const uniqueMakers = new Set(_makers).size
-    const buySwaps = swaps.filter((s) => s.txTypeRaw === "buy")
-    const sellSwaps = swaps.filter((s) => s.txTypeRaw === "sell")
+    const buySwaps = swaps.filter((s) =>
+      s.txTypeRaw === "buy" &&
+      s.label !== "auto-swap" &&
+      s.label !== "auto-swap-outside-transfer"
+    )
+    const sellSwaps = swaps.filter((s) =>
+      s.txTypeRaw === "sell" &&
+      s.label !== "auto-swap" &&
+      s.label !== "auto-swap-outside-transfer"
+    )
     const buyVolumeUsd = buySwaps.reduce(
-      (sum, s) => sum + s.tokenAmount * s.genesisUsdcPrice,
+      (sum, s) => sum + (s.tokenBeforeTax ?? 0) * (s.genesisUsdcPrice ?? 0),
       0
     )
     const sellVolumeUsd = sellSwaps.reduce(
-      (sum, s) => sum + s.tokenAmount * s.genesisUsdcPrice,
+      (sum, s) => sum + (s.tokenBeforeTax ?? 0) * (s.genesisUsdcPrice ?? 0),
       0
     )
     return { uniqueMakers, buyVolumeUsd, sellVolumeUsd }

@@ -90,9 +90,12 @@ export default function HomePage() {
     return `${address.slice(0, 6)}...${address.slice(-4)}`
   }
 
-  const formatDate = (timestamp: string) => {
-  return new Date(timestamp).toUTCString()
-}
+  const formatDate = (timestamp: string | number) => {
+    const ts = typeof timestamp === "string" ? Number(timestamp) : timestamp;
+    if (!ts || isNaN(ts)) return "N/A";
+    const ms = ts < 1e12 ? ts * 1000 : ts;
+    return new Date(ms).toUTCString();
+  }
 
   const handleCopy = (text: string, label: string) => {
     navigator.clipboard.writeText(text)

@@ -82,14 +82,11 @@ export default function TokenDetailsPage() {
     return `${address.slice(0, 8)}...${address.slice(-6)}`
   }
 
-  const formatDate = (timestamp: string) => {
-    return new Date(timestamp).toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    })
+  const formatDate = (timestamp: string | number) => {
+    const ts = typeof timestamp === "string" ? Number(timestamp) : timestamp;
+    if (!ts || isNaN(ts)) return "N/A";
+    const ms = ts < 1e12 ? ts * 1000 : ts;
+    return new Date(ms).toUTCString();
   }
 
   if (loading) {
