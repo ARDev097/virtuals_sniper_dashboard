@@ -3,6 +3,7 @@
 import { Home, Target, TrendingUp } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { useEffect, useState } from "react"
 
 import {
   Sidebar,
@@ -32,6 +33,34 @@ const items = [
 
 export function AppSidebar() {
   const pathname = usePathname()
+  const [tokens, setTokens] = useState<{ name: string; symbol: string }[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    async function fetchTokens() {
+      try {
+        const res = await fetch("/api/tokens")
+        if (!res.ok) throw new Error("Failed to fetch tokens")
+        const data = await res.json()
+        setTokens(data.map((t: any) => ({ name: t.name, symbol: t.symbol })))
+        setError(null)
+      } catch (e) {
+        setError("Could not load tokens")
+        setTokens([])
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchTokens()
+  }, [])
+
+  // Helper to format token name
+  function formatTokenName(name: string) {
+    let formatted = name.replace(/ by Virtuals$/i, "") // Remove 'by Virtuals' at end, case-insensitive
+    formatted = formatted.replace(/_/g, " ") // Replace underscores with spaces
+    return formatted.trim()
+  }
 
   return (
     <Sidebar collapsible="icon">
@@ -62,6 +91,27 @@ export function AppSidebar() {
                 </SidebarMenuItem>
               ))}
             </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+        {/* Tokens Section */}
+        <SidebarGroup>
+          <SidebarGroupLabel>Tokens</SidebarGroupLabel>
+          <SidebarGroupContent>
+            {loading && <div className="px-4 py-2 text-xs text-muted-foreground">Loading tokens...</div>}
+            {error && <div className="px-4 py-2 text-xs text-red-500">{error}</div>}
+            {!loading && !error && (
+              <SidebarMenu>
+                {tokens.map((token) => (
+                  <SidebarMenuItem key={token.symbol}>
+                    <SidebarMenuButton asChild isActive={pathname === `/token/${token.symbol}`}>
+                      <Link href={`/token/${token.symbol}`}>
+                        <span>{formatTokenName(token.name)}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            )}
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>

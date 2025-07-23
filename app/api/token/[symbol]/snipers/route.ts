@@ -36,12 +36,19 @@ function normalizeAddress(addr?: string) {
 }
 
 function getLatestPrice(swaps: any[], token: string) {
-  // Get latest price from all swaps for this token, sorted by timestamp - matching Streamlit
-  const allTokenSwaps = swaps.filter(s => s.genesis_token_symbol === token.toUpperCase())
-  if (allTokenSwaps.length === 0) return 0
-  
-  const latestSwap = allTokenSwaps.sort((a, b) => toTimestamp(b) - toTimestamp(a))[0]
-  return getField(latestSwap, 'genesis_usdc_price')
+  // Sort all swaps by timestampReadable descending and take the first one's genesis_usdc_price
+  if (!swaps || swaps.length === 0) {
+    console.log(`[getLatestPrice] No swaps found in collection for token: ${token}`)
+    return 0
+  }
+  const latestSwap = swaps.sort((a, b) => {
+    const ta = new Date(a.timestampReadable).getTime()
+    const tb = new Date(b.timestampReadable).getTime()
+    return tb - ta
+  })[0]
+  const latestPrice = getField(latestSwap, 'genesis_usdc_price')
+  console.log(`[getLatestPrice] Token: ${token}, Latest Price: ${latestPrice}, Swap:`, latestSwap)
+  return latestPrice
 }
 
 function createChunkedLargeBuys(swaps: any[], token: string) {
@@ -145,65 +152,87 @@ function processSnipers(
     }
   }
 
-  // Step 5: Calculate FIFO PnL for identified snipers
+  // Step 5: Calculate FIFO PnL for identified snipers (Streamlit logic)
   const sniperResults = []
-  const latestPrice = getLatestPrice(swaps, token) // Removed await - this is now synchronous
-  
+  const latestPrice = getLatestPrice(swaps, token)
+
   for (const wallet of snipersSet) {
     const userSwaps = swaps.filter(
       (s) => normalizeAddress(s.maker || s.from) === wallet
     )
     userSwaps.sort((a, b) => toTimestamp(a) - toTimestamp(b))
-    
+
     let realizedPnL = 0
-    let buyQueue: { amount: number; cost: number; price: number }[] = []
+    let buyQueue: { amount: number; amount_paid_for: number; price: number }[] = []
     let buyCount = 0, sellCount = 0, buyTokens = 0, sellTokens = 0
     let buyPriceSum = 0, sellPriceSum = 0, totalTax = 0, totalFees = 0
     let firstBuyTime = null, lastSellTime = null
-    
+
     const outBeforeTax = `${token}_OUT_BeforeTax`
     const outAfterTax = `${token}_OUT_AfterTax`
     const inBeforeTax = `${token}_IN_BeforeTax`
     const inAfterTax = `${token}_IN_AfterTax`
-    
+
     for (const tx of userSwaps) {
       totalTax += getField(tx, 'Tax_1pct')
       totalFees += getField(tx, 'transactionFee')
       const price = getField(tx, 'genesis_usdc_price')
-      
+
       if (tx.swapType === 'buy') {
         buyCount++
-        const amt = getField(tx, outAfterTax)
-        const rawCost = getField(tx, outBeforeTax)
-        buyQueue.push({ amount: amt, cost: rawCost, price })
-        buyTokens += amt
+        const amount_bought_before_tax = getField(tx, outBeforeTax)
+        const amount_received = getField(tx, outAfterTax)
+        if (amount_bought_before_tax <= 0) continue
+        buyQueue.push({
+          amount: amount_received,
+          amount_paid_for: amount_bought_before_tax,
+          price
+        })
+        buyTokens += amount_received
         buyPriceSum += price
         if (!firstBuyTime) firstBuyTime = toDate(tx.timestampReadable || tx.timestamp)
-        
       } else if (tx.swapType === 'sell') {
         sellCount++
-        const amt = getField(tx, inAfterTax)
-        sellTokens += amt
+        const amount_sold_net = getField(tx, inAfterTax)
+        const amount_from_wallet = getField(tx, inBeforeTax)
+        if (amount_sold_net <= 0) continue
+        sellTokens += amount_sold_net
         sellPriceSum += price
         lastSellTime = toDate(tx.timestampReadable || tx.timestamp)
-        
-        // FIFO realized PnL calculation
-        let toMatch = amt
-        while (toMatch > 0 && buyQueue.length) {
+
+        // Streamlit-style FIFO realized PnL calculation
+        let remaining_to_match = amount_from_wallet
+        while (remaining_to_match > 0 && buyQueue.length) {
           const buy = buyQueue[0]
-          const matchAmt = Math.min(toMatch, buy.amount)
-          realizedPnL += matchAmt * (price - buy.price)
-          buy.amount -= matchAmt
-          toMatch -= matchAmt
-          if (buy.amount <= 1e-8) buyQueue.shift()
+          const matched_amount = Math.min(remaining_to_match, buy.amount)
+          const ratio = matched_amount / buy.amount
+          const matched_paid = buy.amount_paid_for * ratio
+
+          const proceeds_ratio = matched_amount / amount_from_wallet
+          const actual_proceeds = amount_sold_net * price * proceeds_ratio
+          const cost_paid = matched_paid * buy.price
+
+          realizedPnL += actual_proceeds - cost_paid
+
+          remaining_to_match -= matched_amount
+          const remaining_buy = buy.amount - matched_amount
+          if (remaining_buy > 0) {
+            const remaining_paid = buy.amount_paid_for * (remaining_buy / buy.amount)
+            buyQueue[0] = {
+              amount: remaining_buy,
+              amount_paid_for: remaining_paid,
+              price: buy.price
+            }
+          } else {
+            buyQueue.shift()
+          }
         }
       }
     }
-    
+
     const tokensLeft = buyQueue.reduce((sum, b) => sum + b.amount, 0)
-    // Match Streamlit's unrealized PnL calculation (total value, not gain/loss)
     const unrealizedPnL = tokensLeft * latestPrice
-    
+
     sniperResults.push({
       wallet,
       netPnL: Number(realizedPnL.toFixed(4)),
@@ -213,13 +242,13 @@ function processSnipers(
       sellCount,
       firstBuyTime: firstBuyTime ? new Date(firstBuyTime).toISOString() : null,
       lastSellTime: lastSellTime ? new Date(lastSellTime).toISOString() : null,
-      avgBuyPrice: buyCount ? Number((buyPriceSum / buyCount).toFixed(4)) : 0,
-      avgSellPrice: sellCount ? Number((sellPriceSum / sellCount).toFixed(4)) : 0,
+      avgBuyPrice: buyCount ? Number((buyPriceSum / buyCount).toFixed(6)) : 0,
+      avgSellPrice: sellCount ? Number((sellPriceSum / sellCount).toFixed(6)) : 0,
       totalTax: Number(totalTax.toFixed(4)),
       totalFees: Number(totalFees.toFixed(4)),
     })
   }
-  
+
   return sniperResults
 }
 
@@ -241,8 +270,8 @@ export async function GET(
     let swaps: any[] = []
     const swapCollection = `${persona.symbol.toLowerCase()}_swap` // Fixed collection name
     try {
-      const swapDb = await connectToDatabase('genesis_tokens_swap_info')
-      swaps = await swapDb.collection(swapCollection).find({}).toArray()
+      const swapDb = await connectToDatabase('virtual')
+      swaps = await swapDb.collection(swapCollection).find({}).sort({ timestamp: -1 }).toArray()
       // Get launch block from swap_progress like Streamlit does
       const swapProgressDoc = await swapDb.collection('swap_progress').findOne({ 
         token_symbol: symbol.toUpperCase() 

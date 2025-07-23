@@ -18,7 +18,7 @@ export async function GET() {
       const swapCollection = `${persona.symbol}_swap`.toLocaleLowerCase()
       let tokenLaunchBlock = persona.blockNumber
       try {
-        const swapDb = await connectToDatabase('genesis_tokens_swap_info')
+        const swapDb = await connectToDatabase('virtual')
         swaps = await swapDb.collection(swapCollection).find({}).toArray()
         // Try to get launch block from swap_progress
         const swapProgressDoc = await swapDb.collection('swap_progress').findOne({

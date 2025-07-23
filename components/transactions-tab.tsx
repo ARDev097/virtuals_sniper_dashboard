@@ -263,7 +263,7 @@ export function TransactionsTab({ symbol }: TransactionsTabProps) {
       label: "Transaction Type",
       isSortable: true,
       render: (row: NormalizedSwap) =>
-        <Badge variant={row.txTypeRaw === "buy" ? "default" : "destructive"}>
+        <Badge variant={row.txTypeRaw === "buy" ? "buy" : "destructive"}>
           {row.txTypeRaw}
         </Badge>
     },

@@ -8,131 +8,6 @@ import altair as alt
 
 # Streamlit Page Setup - MUST be first command
 st.set_page_config(page_title="Sniper PnL Dashboard", layout="wide")
-# ───── Global Styling ─────
-st.markdown("""
-    <style>
-    /* Wrapper container for scrollable table */
-    .scrollable {
-        max-height: 400px;
-        overflow-y: auto;
-        overflow-x: auto;
-        width: 78vw;
-        box-sizing: border-box;
-        display: block;
-        font-family: 'Epilogue', sans-serif;
-        font-size: 14px;
-        color: #222;
-    }
-    
-    /* Table styling */
-    .scrollable table {
-        width: 100%;
-        backdrop-filter: blur(10px);
-        background: rgba(255, 255, 255, 0.8);
-        border-radius: 8px;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-        margin: 0 auto 0 0;
-        table-layout: auto;
-        text-align: center;
-        border-collapse: separate;
-        border-spacing: 0;
-    }
-    
-    /* Table headers and cells */
-    .scrollable th,
-    .scrollable td {
-        padding: 1px 3px;
-        text-align: center;
-        font-size: 15px;
-        font-weight: 300;
-    }
-    
-    /* Header styling */
-    .scrollable th {
-        background: rgba(70, 70, 70, 0.8);
-        color: #fff;
-        text-transform: uppercase;
-        font-weight: 400;
-    }
-    
-    /* Rounded top corners on first and last th */
-    .scrollable th:first-child {
-        border-top-left-radius: 8px;
-    }
-    .scrollable th:last-child {
-        border-top-right-radius: 8px;
-    }
-    /* Remove top padding in main block */
-    .block-container {
-        padding-top: 0rem !important;
-    }
-    header[data-testid="stHeader"] {
-        background: transparent;
-        visibility: visible;
-    }
-    [data-testid="stSidebarNav"] {
-        display: none;
-    }
-    section[data-testid="stSidebar"] {
-        background: rgba(255, 255, 255, 0.15);
-        backdrop-filter: blur(10px);
-        -webkit-backdrop-filter: blur(10px);
-        border-right: 1px solid rgba(255, 255, 255, 0.3);
-        box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
-    }
-    section[data-testid="stSidebar"] .markdown-text-container,
-    div[role="radiogroup"] label span,
-    h1 {
-        color: white !important;
-    }
-    html, body {
-        overflow-x: hidden !important;
-    }
-    .stApp {
-        width: 100vw;
-        box-sizing: border-box;
-        background: radial-gradient(circle, rgba(18, 73, 97, 1) 0%, rgba(5, 27, 64, 1) 100%);
-    }
-    .glass-kpi {
-        background: rgba(255, 255, 255, 0.12);
-        border-radius: 12px;
-        padding: 1rem;
-        backdrop-filter: blur(10px);
-        -webkit-backdrop-filter: blur(10px);
-        border: 1px solid rgba(255, 255, 255, 0.25);
-        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
-        color: white;
-        text-align: center;
-    }
-    .glass-kpi h4 {
-        font-size: 14px;
-        font-weight: 600;
-        text-align: center;
-        margin-bottom: 0; line-height: 1;
-        text-transform: uppercase;
-        color: #ffffffcc;
-    }
-    .glass-kpi p {
-        font-size: 35px;
-        font-weight: bold;
-        text-align: center;
-        margin: 0; line-height: 1;
-    }
-    .kpi-inner {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-    }
-    # Wrap headers in dataframe 
-    [data-testid="stDataFrame"] th div {
-        white-space: normal !important;
-        word-wrap: break-word;
-        text-align: center;
-    }
-    </style>
-""", unsafe_allow_html=True)
-
 
 load_dotenv()
 
@@ -140,16 +15,17 @@ load_dotenv()
 @st.cache_resource
 def get_mongo_client():
     """Cache MongoDB client connection"""
-    return MongoClient(st.secrets["MONGO_URI"])
+    return MongoClient(os.getenv("MONGO_URL2"))
 
 @st.cache_data(ttl=300)  # Cache for 5 minutes
 def load_swap_data():
     """Load and cache swap data from MongoDB"""
     client = get_mongo_client()
-    db = client["genesis_tokens_swap_info"]
+    db = client["virtual"]
     
     # swap_collections = [col for col in db.list_collection_names() if col.endswith('_swap')]
-    swap_collections = ['jarvis_swap', 'tian_swap', 'badai_swap', 'aispace_swap', 'wint_swap']
+    swap_collections = ['jarvis_swap', 'tian_swap', 'badai_swap',
+                       'aispace_swap', 'wint_swap']
     combined_df = pd.DataFrame()
 
     for col_name in swap_collections:
@@ -195,7 +71,7 @@ def load_swap_data():
 def load_launch_blocks():
     """Load and cache launch block information"""
     client = get_mongo_client()
-    db = client["genesis_tokens_swap_info"]
+    db = client["virtual"]
     db_persona = client["virtualgenesis"]
     
     try:
@@ -275,11 +151,13 @@ def process_sniper_data(combined_df, token_launch_blocks):
 
     merged['time_diff'] = (merged['timestampReadable_sell'] - merged['timestampReadable_buy']).dt.total_seconds()
     quick_sells = merged[merged['time_diff'].between(0, 20 * 60)]
+
+    # Only keep sniper buys where both maker and token_name match a quick sell
     quick_sells_pairs = set(zip(quick_sells['maker'], quick_sells['token_name']))
     potential_sniper_df = df_sniper_buys[
         df_sniper_buys.apply(lambda row: (row['maker'], row['token_name']) in quick_sells_pairs, axis=1)
     ].copy()
-    
+
     return potential_sniper_df, combined_df
 
 @st.cache_data(ttl=300)  # Cache for 5 minutes
@@ -292,7 +170,7 @@ def calculate_pnl(potential_sniper_df, combined_df):
         maker = row['maker']
         token = row['token_name']
         df = combined_df[(combined_df['maker'] == maker) & (combined_df['token_name'] == token)]
-        df = df.sort_values(by='timestamp')
+        df = df.sort_values(by='timestampReadable')
         trades_by_maker = defaultdict(list)
 
         buy_txn_count = (df['swapType'] == 'buy').sum()
@@ -373,7 +251,7 @@ def calculate_pnl(potential_sniper_df, combined_df):
         remaining_tokens = sum(b['amount'] for b in buy_queue)
 
         # Get latest price for the token from combined_df
-        latest_token_row = combined_df[combined_df['token_name'] == token].sort_values(by='timestamp', ascending=False).head(1)
+        latest_token_row = combined_df[combined_df['token_name'] == token].sort_values(by='timestampReadable', ascending=False).head(1)
         if not latest_token_row.empty:
             latest_price = float(latest_token_row['genesis_usdc_price'].values[0])
         else:
@@ -409,95 +287,30 @@ with st.spinner("Loading data..."):
     potential_sniper_df, combined_df = process_sniper_data(combined_df, token_launch_blocks)
     pnl_df = calculate_pnl(potential_sniper_df, combined_df)
 
-def render_sidebar():
-    with st.sidebar:
-        st.markdown("---")
-        current_script = os.path.basename(__file__).lower()
+with st.sidebar:
+    st.header("🔍 Filters")
+    token_filter = st.multiselect("Select Token(s):", options=sorted([t for t in pnl_df["Token"].unique() if t is not None]), default=[])
+    wallet_search = st.text_input("Enter Wallet Address:", value="")
+    # Date range filter for First Buy Time
+    min_date = pd.to_datetime(pnl_df["First Buy Time"]).min()
+    max_date = pd.to_datetime(pnl_df["First Buy Time"]).max()
+    date_range = st.date_input(
+        "Select First Buy Date Range:",
+        value=(min_date.date(), max_date.date()),
+        min_value=min_date.date(),
+        max_value=max_date.date()
+    )
+    # Net PnL range filter
+    min_pnl = float(pnl_df["Net PnL"].min())
+    max_pnl = float(pnl_df["Net PnL"].max())
+    pnl_range = st.slider(
+        "Select Net PnL Range:",
+        min_value=min_pnl,
+        max_value=max_pnl,
+        value=(min_pnl, max_pnl),
+        step=0.01
+    )
 
-        routes = [
-            ("🏠 Home", "/", "cards2.py"),
-            ("🌍 Global Sniper Analysis", "/🌍 Global Sniper Analysis", "global_snipers.py")
-        ]
-
-        for label, href, script_name in routes:
-            is_active = script_name.lower() == current_script
-            bg_color = "rgba(227,250,255,0.2)" if is_active else "rgba(42,42,42,0.4)"
-            if is_active:
-                st.markdown(
-                    f"""
-                    <div style="
-                        display: block;
-                        padding: 0.5rem 1rem;
-                        margin-bottom: 0.5rem;
-                        font-weight: 500;
-                        border-radius: 6px;
-                        color: white;
-                        background-color: {bg_color};
-                    ">{label} ✅</div>
-                    """,
-                    unsafe_allow_html=True
-                )
-            else:
-                st.markdown(
-                    f"""
-                    <a href="{href}" target="_self" style="
-                        display: block;
-                        padding: 0.5rem 1rem;
-                        margin-bottom: 0.5rem;
-                        font-weight: 500;
-                        border-radius: 6px;
-                        color: white;
-                        background-color: {bg_color};
-                        text-decoration: none;
-                    ">{label}</a>
-                    """,
-                    unsafe_allow_html=True
-                )
-        st.markdown("---")
-
-render_sidebar()
-
-# Streamlit UI
-# Page Title
-st.markdown("<h1 style='color: white;'>Potential Snipers – PnL Overview</h1>", unsafe_allow_html=True)
-
-# Filter Popover Top-Right
-header_left, header_right = st.columns([6, 1])
-with header_right:
-    from datetime import date
-    with st.popover("FILTER SNIPERS", icon="🔽", use_container_width=True):
-        s1, s2, s3 = st.columns(3)
-        with s1:
-            token_filter = st.multiselect(
-                "Select Token(s):",
-                options=sorted([t for t in pnl_df["Token"].unique() if t is not None]),
-                default=[]
-            )
-        with s2:
-            wallet_search = st.text_input("Enter Wallet Address:", value="")
-        with s3:
-            min_date = pd.to_datetime(pnl_df["First Buy Time"]).min()
-            max_date = pd.to_datetime(pnl_df["First Buy Time"]).max()
-            date_range = st.date_input(
-                "Select First Buy Date Range:",
-                value=(min_date.date(), max_date.date()),
-                min_value=min_date.date(),
-                max_value=max_date.date()
-            )
-
-        s4, s5 = st.columns([1,5])
-        with s4:
-            st.write("RANGE : ")
-        with s5:
-            min_pnl = float(pnl_df["Net PnL"].min())
-            max_pnl = float(pnl_df["Net PnL"].max())
-            pnl_range = st.slider(
-                "",
-                min_value=min_pnl,
-                max_value=max_pnl,
-                value=(min_pnl, max_pnl),
-                step=0.01
-            )
 filtered_df = pnl_df.copy()
 filtered_df = filtered_df.reset_index(drop=True)
 filtered_df.insert(0, 'S.No', range(1, len(filtered_df) + 1))
@@ -522,6 +335,9 @@ filtered_df = filtered_df[(filtered_df["Net PnL"] >= pnl_range[0]) & (filtered_d
 if wallet_search and filtered_df.empty:
     st.warning("No snipers found matching the entered address.")
 
+# Streamlit UI
+st.title(f"Potential Snipers – PnL Overview")
+
 st.subheader("📊 Sniper Summary Table")
 
 # Sort by net_pnl descending
@@ -530,116 +346,33 @@ filtered_df['S.No'] = range(1, len(filtered_df) + 1)
 
 # Autosize all columns
 column_config = {col: {"width": "auto"} for col in filtered_df.columns}
-st.markdown("<div class='scrollable'>", unsafe_allow_html=True)
 st.dataframe(filtered_df, hide_index=True, column_config=column_config)
-st.markdown("</div>", unsafe_allow_html=True)
 
 # Add gap between table and KPIs
 st.markdown("<div style='height: 20px;'></div>", unsafe_allow_html=True)
 
-# Add gap between table and token-filtered analysis
-st.markdown("<div style='height: 30px;'></div>", unsafe_allow_html=True)
 
+st.subheader("📊 Global Sniper Metrics")
 
-if token_filter:
-    st.subheader("🎯 Token-wise Sniper Summary")
+kpi1, kpi2, kpi3 = st.columns(3)
+with kpi1:
+    st.markdown("<div style='font-size:1.3em; font-weight:bold;'>Total Unique Snipers</div>", unsafe_allow_html=True)
+    st.metric(label="", value=f"{pnl_df['Sniper Wallet Address'].nunique()}")
+with kpi2:
+    st.markdown("<div style='font-size:1.3em; font-weight:bold;'>Total Realized PnL</div>", unsafe_allow_html=True)
+    st.metric(label="", value=f"${pnl_df['Net PnL'].sum():,.2f}")
+with kpi3:
+    st.markdown("<div style='font-size:1.3em; font-weight:bold;'>Total Unrealized PnL</div>", unsafe_allow_html=True)
+    st.metric(label="", value=f"${pnl_df['Unrealized PnL'].sum():,.2f}")
 
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        token_summary = (
-            filtered_df.groupby('Token')
-            .agg({
-                'Sniper Wallet Address': pd.Series.nunique,
-                'Net PnL': 'sum',
-                'Unrealized PnL': 'sum'
-            })
-            .reset_index()
-            .rename(columns={
-                'Sniper Wallet Address': 'Unique Snipers',
-                'Net PnL': 'Total Realized PnL',
-                'Unrealized PnL': 'Total Unrealized PnL'
-            })
-            .sort_values('Total Realized PnL', ascending=False)
-        )
-        st.dataframe(token_summary, use_container_width=True, hide_index=True)
-
-        st.markdown("##### Token Sniper Count (Filtered)")
-        token_counts = (
-            filtered_df.groupby('Token')['Sniper Wallet Address']
-            .nunique().reset_index()
-        )
-        chart_counts = alt.Chart(token_counts).mark_bar().encode(
-            x=alt.X('Token:N', sort='-y'),
-            y=alt.Y('Sniper Wallet Address:Q', title='Unique Snipers'),
-            tooltip=['Token', 'Sniper Wallet Address']
-        ).properties(height=250)
-        st.altair_chart(chart_counts, use_container_width=True)
-
-    with col2:
-        st.markdown("##### Top 10 Snipers by Net PnL (Filtered)")
-        top10_snipers = (
-            filtered_df.groupby('Sniper Wallet Address')['Net PnL']
-            .sum().nlargest(10).reset_index()
-        )
-        chart_top10 = alt.Chart(top10_snipers).mark_bar().encode(
-            x=alt.X('Sniper Wallet Address:N', sort='-y'),
-            y=alt.Y('Net PnL:Q'),
-            tooltip=['Sniper Wallet Address', 'Net PnL']
-        ).properties(height=350)
-        st.altair_chart(chart_top10, use_container_width=True)
-
-    with col3:
-        st.markdown("##### Sniper PnL Distribution (Filtered)")
-        chart_pnl_dist = alt.Chart(filtered_df).mark_bar().encode(
-            x=alt.X('Net PnL:Q', bin=alt.Bin(maxbins=30)),
-            y=alt.Y('count():Q'),
-            tooltip=['count()']
-        ).properties(height=350)
-        st.altair_chart(chart_pnl_dist, use_container_width=True)
-
-st.subheader("📊 Sniper Metrics")
-
-col1, col2, col3 = st.columns(3)
-
-with col1:
-    st.markdown(f"""
-        <div class='glass-kpi'>
-            <div class='kpi-inner'>
-                <h4>Total Unique Snipers</h4>
-                <p>{pnl_df['Sniper Wallet Address'].nunique()}</p>
-            </div>
-        </div>
-    """, unsafe_allow_html=True)
-
-with col2:
-    st.markdown(f"""
-        <div class='glass-kpi'>
-            <div class='kpi-inner'>
-                <h4>Total Realized PnL</h4>
-                <p>${pnl_df['Net PnL'].sum():,.2f}</p>
-            </div>
-        </div>
-    """, unsafe_allow_html=True)
-
-with col3:
-    st.markdown(f"""
-        <div class='glass-kpi'>
-            <div class='kpi-inner'>
-                <h4>Total Unrealized PnL</h4>
-                <p>${pnl_df['Unrealized PnL'].sum():,.2f}</p>
-            </div>
-        </div>
-    """, unsafe_allow_html=True)
-
-# Add gap
+# Add gap between KPIs and charts
 st.markdown("<div style='height: 20px;'></div>", unsafe_allow_html=True)
 
 # Graphs
 st.subheader("📈 Sniper & Token Activity Overview")
 graph1, graph2 = st.columns(2)
 
-# Top 10 Snipers by Net PnL (filtered)
+# Top 10 Snipers by Net PnL
 with graph1:
     top10_snipers = pnl_df.groupby('Sniper Wallet Address')['Net PnL'].sum().nlargest(10).reset_index()
     chart = alt.Chart(top10_snipers).mark_bar().encode(
@@ -649,17 +382,17 @@ with graph1:
     ).properties(title='Top 10 Snipers by Net PnL', height=350)
     st.altair_chart(chart, use_container_width=True)
 
-# Token Sniper Activity — only show tokens in filtered_df
+# Tokens with Most Sniper Activity
 with graph2:
-    token_sniper_counts = pnl_df.groupby('Token')['Sniper Wallet Address'].nunique().reset_index()
+    token_sniper_counts = pnl_df.groupby('Token')['Sniper Wallet Address'].nunique().sort_values(ascending=False).head(10).reset_index()
     chart2 = alt.Chart(token_sniper_counts).mark_bar().encode(
         x=alt.X('Sniper Wallet Address:Q', title='Unique Snipers'),
         y=alt.Y('Token:N', sort='-x', title='Token'),
         tooltip=['Token', 'Sniper Wallet Address']
-    ).properties(title='Token Sniper Activity', height=350)
+    ).properties(title='Tokens with Most Sniper Activity', height=350)
     st.altair_chart(chart2, use_container_width=True)
 
-# Sniper Profit Distribution (filtered)
+# Sniper Profit Distribution
 st.subheader("📊 Sniper Profit Distribution")
 hist = alt.Chart(pnl_df).mark_bar().encode(
     x=alt.X('Net PnL:Q', bin=alt.Bin(maxbins=30), title='Net PnL'),
@@ -667,3 +400,4 @@ hist = alt.Chart(pnl_df).mark_bar().encode(
     tooltip=['count()']
 ).properties(title='Sniper Profit Distribution', height=300)
 st.altair_chart(hist, use_container_width=True)
+

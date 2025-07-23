@@ -16,7 +16,7 @@ export async function GET(req: NextRequest, { params }: { params: { symbol: stri
     let swaps: any[] = []
     const swapCollection = `${persona.symbol}_swap`.toLocaleLowerCase()
     try {
-      const swapDb = await connectToDatabase('genesis_tokens_swap_info')
+      const swapDb = await connectToDatabase('virtual')
       swaps = await swapDb.collection(swapCollection).find({}).toArray()
     } catch (e) {}
     if (swaps.length === 0) swaps = mockSwaps

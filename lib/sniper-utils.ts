@@ -34,10 +34,14 @@ export function normalizeAddress(addr?: string) {
 }
 
 export function getLatestPrice(swaps: any[], token: string) {
-  // Get latest price from all swaps for this token, sorted by timestamp - matching Streamlit
-  const allTokenSwaps = swaps.filter(s => s.genesis_token_symbol === token.toUpperCase())
-  if (allTokenSwaps.length === 0) return 0
-  const latestSwap = allTokenSwaps.sort((a, b) => toTimestamp(b) - toTimestamp(a))[0]
+  // Sort all swaps by timestampReadable (or timestamp) descending and take the first one's genesis_usdc_price
+  if (!swaps || swaps.length === 0) return 0
+  const sorted = swaps.slice().sort((a, b) => {
+    const ta = a.timestampReadable ? new Date(a.timestampReadable).getTime() : (a.timestamp ? a.timestamp * 1000 : 0)
+    const tb = b.timestampReadable ? new Date(b.timestampReadable).getTime() : (b.timestamp ? b.timestamp * 1000 : 0)
+    return tb - ta
+  })
+  const latestSwap = sorted[0]
   return getField(latestSwap, 'genesis_usdc_price')
 }
 
@@ -134,7 +138,7 @@ export function processSnipers(
     )
     userSwaps.sort((a, b) => toTimestamp(a) - toTimestamp(b))
     let realizedPnL = 0
-    let buyQueue: { amount: number; cost: number; price: number }[] = []
+    let buyQueue: { amount: number; amount_paid_for: number; price: number }[] = []
     let buyCount = 0, sellCount = 0, buyTokens = 0, sellTokens = 0
     let buyPriceSum = 0, sellPriceSum = 0, totalTax = 0, totalFees = 0
     let firstBuyTime = null, lastSellTime = null
@@ -148,27 +152,53 @@ export function processSnipers(
       const price = getField(tx, 'genesis_usdc_price')
       if (tx.swapType === 'buy') {
         buyCount++
-        const amt = getField(tx, outAfterTax)
-        const rawCost = getField(tx, outBeforeTax)
-        buyQueue.push({ amount: amt, cost: rawCost, price })
-        buyTokens += amt
-        buyPriceSum += price
-        if (!firstBuyTime) firstBuyTime = toDate(tx.timestampReadable || tx.timestamp)
+        const amount_bought_before_tax = getField(tx, outBeforeTax)
+        const amount_received = getField(tx, outAfterTax)
+        if (amount_bought_before_tax > 0) {
+          buyQueue.push({
+            amount: amount_received, // tokens received after tax
+            amount_paid_for: amount_bought_before_tax, // tokens bought before tax
+            price: price
+          })
+          buyTokens += amount_received
+          buyPriceSum += price
+          if (!firstBuyTime) firstBuyTime = toDate(tx.timestampReadable || tx.timestamp)
+        }
       } else if (tx.swapType === 'sell') {
         sellCount++
-        const amt = getField(tx, inAfterTax)
-        sellTokens += amt
-        sellPriceSum += price
-        lastSellTime = toDate(tx.timestampReadable || tx.timestamp)
-        // FIFO realized PnL calculation
-        let toMatch = amt
-        while (toMatch > 0 && buyQueue.length) {
-          const buy = buyQueue[0]
-          const matchAmt = Math.min(toMatch, buy.amount)
-          realizedPnL += matchAmt * (price - buy.price)
-          buy.amount -= matchAmt
-          toMatch -= matchAmt
-          if (buy.amount <= 1e-8) buyQueue.shift()
+        const amount_sold_net = getField(tx, inAfterTax)
+        const amount_from_wallet = getField(tx, inBeforeTax)
+        if (amount_sold_net > 0) {
+          sellTokens += amount_sold_net
+          sellPriceSum += price
+          lastSellTime = toDate(tx.timestampReadable || tx.timestamp)
+          // Streamlit-style FIFO realized PnL calculation
+          let remaining_to_match = amount_from_wallet
+          while (remaining_to_match > 0 && buyQueue.length) {
+            const buy = buyQueue[0]
+            const matched_amount = Math.min(remaining_to_match, buy.amount)
+            const ratio = matched_amount / buy.amount
+            const matched_paid = buy.amount_paid_for * ratio
+
+            const proceeds_ratio = matched_amount / amount_from_wallet
+            const actual_proceeds = amount_sold_net * price * proceeds_ratio
+            const cost_paid = matched_paid * buy.price
+
+            realizedPnL += actual_proceeds - cost_paid
+
+            remaining_to_match -= matched_amount
+            const remaining_buy = buy.amount - matched_amount
+            if (remaining_buy > 0) {
+              const remaining_paid = buy.amount_paid_for * (remaining_buy / buy.amount)
+              buyQueue[0] = {
+                amount: remaining_buy,
+                amount_paid_for: remaining_paid,
+                price: buy.price
+              }
+            } else {
+              buyQueue.shift()
+            }
+          }
         }
       }
     }

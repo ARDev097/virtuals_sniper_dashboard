@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts"
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from "recharts"
 
 interface Sniper {
   wallet: string
@@ -164,13 +164,35 @@ export function SniperInsightsTab({ symbol }: SniperInsightsTabProps) {
           <CardTitle>Top 5 Snipers by Net PnL</CardTitle>
         </CardHeader>
         <CardContent>
-          <ResponsiveContainer width="100%" height={300}>
+          <ResponsiveContainer width="100%" height={400}>
             <BarChart data={top5Snipers}>
               <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="wallet" />
-              <YAxis />
+              <XAxis
+                dataKey="wallet"
+                label={{
+                  value: 'Wallet',
+                  position: 'insideBottom',
+                  dy: 10,
+                  textAnchor: 'middle',
+                  style: { fontWeight: 500 }
+                }}
+              />
+              <YAxis
+                label={{
+                  value: 'Net PnL (In USD)',
+                  angle: -90,
+                  position: 'insideLeft',
+                  dx: -10,
+                  textAnchor: 'middle',
+                  style: { fontWeight: 500 }
+                }}
+              />
               <Tooltip formatter={(value) => [`$${Number(value).toFixed(2)}`, "Net PnL"]} />
-              <Bar dataKey="netPnL" fill="#8884d8" />
+              <Bar dataKey="netPnL">
+                {top5Snipers.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={entry.netPnL >= 0 ? '#22c55e' : '#ef4444'} />
+                ))}
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
         </CardContent>
