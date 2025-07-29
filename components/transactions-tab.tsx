@@ -78,6 +78,18 @@ function CopyableCell({ value, display }: { value: string, display: string }) {
   )
 }
 
+// ---- Information icon with tooltip ----
+function InfoIcon({ tooltip }: { tooltip: string }) {
+  return (
+    <span 
+      className="inline-flex items-center justify-center w-5 h-5 ml-1 rounded-full bg-gray-200 hover:bg-gray-300 transition-all duration-200 cursor-help border border-gray-300"
+      title={tooltip}
+    >
+      <span className="text-xs font-medium text-gray-700">i</span>
+    </span>
+  )
+}
+
 // ---- Price toggle column ----
 function PriceToggleHeader({ showUsd, onToggle, tokenName }: { showUsd: boolean, onToggle: () => void, tokenName: string }) {
   return (
@@ -208,7 +220,7 @@ export function TransactionsTab({ symbol }: TransactionsTabProps) {
 
   // Pagination
   const [page, setPage] = useState(1)
-  const rowsPerPage = 100
+  const rowsPerPage = 25
 
   const [showUsdPrice, setShowUsdPrice] = useState(true)
   const tokenUpper = symbol.toUpperCase()
@@ -330,8 +342,15 @@ export function TransactionsTab({ symbol }: TransactionsTabProps) {
     },
     {
       key: "genesisPrice",
-      label: <PriceToggleHeader showUsd={showUsdPrice} onToggle={() => setShowUsdPrice(v => !v)} tokenName={tokenUpper} />,
-      // tooltip: `${tokenUpper} USD price / Virtual Price`,
+      label: (
+        <span className="inline-flex items-center">
+          <PriceToggleHeader showUsd={showUsdPrice} onToggle={() => setShowUsdPrice(v => !v)} tokenName={tokenUpper} />
+          <InfoIcon tooltip={showUsdPrice 
+            ? `The value of ${tokenUpper} at the time of the transaction.` 
+            : `The value of ${tokenUpper} at the time of the transaction.`
+          } />
+        </span>
+      ),
       isSortable: true,
       render: (row: NormalizedSwap) =>
         <PriceCell row={row} showUsd={showUsdPrice} />,
@@ -339,11 +358,11 @@ export function TransactionsTab({ symbol }: TransactionsTabProps) {
     {
       key: "tax",
       label: (
-        <span title="Tax Paid in Native Token">
+        <span className="inline-flex items-center">
           Tax
+          <InfoIcon tooltip="The amount of native token deducted as tax for the transaction." />
         </span>
       ),
-      tooltip: "Tax Paid in Native Token",
       isSortable: true,
       render: (row: NormalizedSwap) =>
         Number(row.tax ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 }),
@@ -351,11 +370,11 @@ export function TransactionsTab({ symbol }: TransactionsTabProps) {
     {
       key: "transactionFee",
       label: (
-        <span title="Transaction Fees paid in ETH">
+        <span className="inline-flex items-center">
           Tx Fees
+          <InfoIcon tooltip="ETH spent as a fee to complete the transaction." />
         </span>
       ),
-      tooltip: "Transaction Fees paid in ETH",
       isSortable: true,
       render: (row: NormalizedSwap) =>
         Number(row.transactionFee ?? 0).toLocaleString(undefined, { maximumFractionDigits: 8 }),
@@ -363,11 +382,11 @@ export function TransactionsTab({ symbol }: TransactionsTabProps) {
     {
       key: "txVolume",
       label: (
-        <span title="Transaction value in USD">
+        <span className="inline-flex items-center">
           TX Volume ($)
+          <InfoIcon tooltip={`Total USD value of ${tokenUpper} used in the transaction.`} />
         </span>
       ),
-      // tooltip: "Transaction value in USD before tax",
       isSortable: true,
       render: (row: NormalizedSwap) =>
         Number(row.txVolume ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 }),
@@ -716,34 +735,49 @@ export function TransactionsTab({ symbol }: TransactionsTabProps) {
           {/* Transaction Type, Swap Type, Search only */}
           <div className="flex flex-col md:flex-row md:items-center gap-4">
             {/* Transaction Type */}
-            <Select value={transactionTypeFilter} onValueChange={setTransactionTypeFilter}>
-              <SelectTrigger className="w-40">
-                <SelectValue placeholder="Transaction Type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All</SelectItem>
-                <SelectItem value="buy">Buy</SelectItem>
-                <SelectItem value="sell">Sell</SelectItem>
-              </SelectContent>
-            </Select>
+            <div className="flex flex-col gap-1">
+              <label className="text-sm font-medium text-muted-foreground">Transaction Type</label>
+              <Select value={transactionTypeFilter} onValueChange={setTransactionTypeFilter}>
+                <SelectTrigger className="w-40">
+                  <SelectValue>
+                    {transactionTypeFilter === "all" ? "All Transactions" : transactionTypeFilter === "buy" ? "Buy Only" : "Sell Only"}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Transactions</SelectItem>
+                  <SelectItem value="buy">Buy Only</SelectItem>
+                  <SelectItem value="sell">Sell Only</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             {/* Swap Type */}
-            <Select value={swapTypeFilter} onValueChange={setSwapTypeFilter}>
-              <SelectTrigger className="w-40">
-                <SelectValue placeholder="Swap Type" />
-              </SelectTrigger>
-              <SelectContent>
-                {availableSwapTypes.map((t) => (
-                  <SelectItem key={t} value={t}>{t}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="flex flex-col gap-1">
+              <label className="text-sm font-medium text-muted-foreground">Swap Type</label>
+              <Select value={swapTypeFilter} onValueChange={setSwapTypeFilter}>
+                <SelectTrigger className="w-40">
+                  <SelectValue>
+                    {swapTypeFilter === "All" ? "All Swap Types" : swapTypeFilter}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {availableSwapTypes.map((t) => (
+                    <SelectItem key={t} value={t}>
+                      {t === "All" ? "All Swap Types" : t}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             {/* Search */}
-            <Input
-              placeholder="Block | Maker | TX Hash"
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
-              className="flex-1"
-            />
+            <div className="flex flex-col gap-1 flex-1">
+              <label className="text-sm font-medium text-muted-foreground">Search</label>
+              <Input
+                placeholder="Search by Block, Maker, or TX Hash"
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                className="flex-1"
+              />
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -758,68 +792,60 @@ export function TransactionsTab({ symbol }: TransactionsTabProps) {
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  {tableColumns.map((col, idx) => (
-                    <TableHead
-                      key={idx}
-                      className={col.isSortable ? "cursor-pointer select-none" : ""}
-                      title={typeof col.tooltip === "string" ? col.tooltip : undefined}
-                      onClick={
-                        col.isSortable
-                          ? () => {
-                            if (sortCol === col.key) {
-                              setSortDir(sortDir === "asc" ? "desc" : "asc")
-                            } else {
-                              setSortCol(col.key)
-                              setSortDir("asc")
+            <div className="max-h-[600px] overflow-y-auto">
+              <Table>
+                <TableHeader className="sticky top-0 bg-background z-10">
+                  <TableRow>
+                    {tableColumns.map((col, idx) => (
+                      <TableHead
+                        key={idx}
+                        className={col.isSortable ? "cursor-pointer select-none" : ""}
+                        onClick={
+                          col.isSortable
+                            ? () => {
+                              if (sortCol === col.key) {
+                                setSortDir(sortDir === "asc" ? "desc" : "asc")
+                              } else {
+                                setSortCol(col.key)
+                                setSortDir("asc")
+                              }
                             }
-                          }
-                          : undefined
-                      }
-                      style={col.isSortable ? { userSelect: "none" } : undefined}
-                    >
-                      <span className="flex items-center gap-1">
-                        {col.label}
-                        {col.isSortable && (
-                          <span>
-                            {sortCol === col.key
-                              ? sortDir === "asc"
-                                ? "▲"
-                                : "▼"
-                              : ""}
-                          </span>
-                        )}
-                      </span>
-                    </TableHead>
-                  ))}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {loading
-                  ? [...Array(5)].map((_, i) => (
-                    <TableRow key={i}>
-                      {tableColumns.map((_, j) => (
-                        <TableCell key={j}>
-                          <div className="h-4 bg-muted rounded animate-pulse"></div>
-                        </TableCell>
+                            : undefined
+                        }
+                        style={col.isSortable ? { userSelect: "none" } : undefined}
+                      >
+                        <span className="flex items-center gap-1">
+                          {col.label}
+                        </span>
+                      </TableHead>
+                    ))}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {loading
+                    ? [...Array(10)].map((_, i) => (
+                        <TableRow key={i}>
+                          {tableColumns.map((_, j) => (
+                            <TableCell key={j}>
+                              <div className="h-4 bg-muted rounded animate-pulse"></div>
+                            </TableCell>
+                          ))}
+                        </TableRow>
+                      ))
+                    : pageData.map((row, idx) => (
+                        <TableRow key={idx}>
+                          {tableColumns.map((col, colIdx) => (
+                            <TableCell key={colIdx}>
+                              {col.render
+                                ? col.render(row)
+                                : row[col.key] ?? ""}
+                            </TableCell>
+                          ))}
+                        </TableRow>
                       ))}
-                    </TableRow>
-                  ))
-                  : pageData.map((row, idx) => (
-                    <TableRow key={idx}>
-                      {tableColumns.map((col, colIdx) => (
-                        <TableCell key={colIdx}>
-                          {col.render
-                            ? col.render(row)
-                            : row[col.key] ?? ""}
-                        </TableCell>
-                      ))}
-                    </TableRow>
-                  ))}
-              </TableBody>
-            </Table>
+                </TableBody>
+              </Table>
+            </div>
           </div>
           {/* Pagination Controls */}
           {pageCount > 1 && (

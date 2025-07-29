@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useParams } from "next/navigation"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -29,6 +29,36 @@ interface TokenData {
     buyVolume: number
     sellVolume: number
   }
+}
+
+// ---- Copy-to-clipboard cell ----
+function CopyableCell({ value, display }: { value: string, display: string }) {
+  const [copied, setCopied] = useState(false)
+  const ref = useRef<HTMLButtonElement>(null)
+  const onCopy = () => {
+    navigator.clipboard.writeText(value)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1000)
+  }
+  return (
+    <span className="inline-flex items-center gap-1">
+      <span>{display}</span>
+      <button
+        ref={ref}
+        className="text-xs text-blue-500 hover:underline"
+        title={copied ? "Copied!" : "Copy"}
+        onClick={onCopy}
+        tabIndex={-1}
+        type="button"
+        style={{
+          border: "none",
+          background: "none",
+          cursor: "pointer",
+          padding: 0,
+        }}
+      >{copied ? "✓" : <span aria-label="Copy" role="img">📋</span>}</button>
+    </span>
+  )
 }
 
 export default function TokenDetailsPage() {
@@ -139,7 +169,9 @@ export default function TokenDetailsPage() {
             <CardTitle className="text-sm font-medium">Token Address</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-sm font-mono">{formatAddress(tokenData.token)}</div>
+            <div className="text-sm font-mono">
+              <CopyableCell value={tokenData.token} display={tokenData.token} />
+            </div>
           </CardContent>
         </Card>
         <Card>
@@ -147,7 +179,13 @@ export default function TokenDetailsPage() {
             <CardTitle className="text-sm font-medium">DAO Address</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-sm font-mono">{tokenData.dao ? formatAddress(tokenData.dao) : "N/A"}</div>
+            <div className="text-sm font-mono">
+              {tokenData.dao ? (
+                <CopyableCell value={tokenData.dao} display={tokenData.dao} />
+              ) : (
+                "N/A"
+              )}
+            </div>
           </CardContent>
         </Card>
         <Card>
@@ -155,7 +193,13 @@ export default function TokenDetailsPage() {
             <CardTitle className="text-sm font-medium">LP Address</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-sm font-mono">{tokenData.lp ? formatAddress(tokenData.lp) : "N/A"}</div>
+            <div className="text-sm font-mono">
+              {tokenData.lp ? (
+                <CopyableCell value={tokenData.lp} display={tokenData.lp} />
+              ) : (
+                "N/A"
+              )}
+            </div>
           </CardContent>
         </Card>
         <Card>

@@ -1,10 +1,11 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from "recharts"
+import { ChevronUp, ChevronDown } from "lucide-react"
 
 interface Sniper {
   wallet: string
@@ -21,6 +22,72 @@ interface Sniper {
   totalFees: number
 }
 
+type SortField = 'netPnL' | 'unrealizedPnL' | 'tokensLeft' | 'avgBuyPrice' | 'avgSellPrice' | 'totalTax' | 'totalFees'
+type SortDirection = 'asc' | 'desc'
+
+// ---- Copy-to-clipboard cell ----
+function CopyableCell({ value, display }: { value: string, display: string }) {
+  const [copied, setCopied] = useState(false)
+  const ref = useRef<HTMLButtonElement>(null)
+  const onCopy = () => {
+    navigator.clipboard.writeText(value)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1000)
+  }
+  return (
+    <span className="inline-flex items-center gap-1">
+      <span>{display}</span>
+      <button
+        ref={ref}
+        className="text-xs text-blue-500 hover:underline"
+        title={copied ? "Copied!" : "Copy"}
+        onClick={onCopy}
+        tabIndex={-1}
+        type="button"
+        style={{
+          border: "none",
+          background: "none",
+          cursor: "pointer",
+          padding: 0,
+        }}
+      >{copied ? "✓" : <span aria-label="Copy" role="img">📋</span>}</button>
+    </span>
+  )
+}
+
+// ---- Sortable Table Header ----
+function SortableHeader({ 
+  children, 
+  field, 
+  currentSort, 
+  currentDirection, 
+  onSort 
+}: { 
+  children: React.ReactNode
+  field: SortField
+  currentSort: SortField | null
+  currentDirection: SortDirection
+  onSort: (field: SortField) => void
+}) {
+  const isActive = currentSort === field
+  
+  return (
+    <TableHead 
+      className="cursor-pointer hover:bg-muted/50 select-none"
+      onClick={() => onSort(field)}
+    >
+      <div className="flex items-center gap-1">
+        {children}
+        {isActive && currentDirection === 'asc' ? (
+          <ChevronUp className="h-4 w-4" />
+        ) : (
+          <div className="h-4 w-4" />
+        )}
+      </div>
+    </TableHead>
+  )
+}
+
 interface SniperInsightsTabProps {
   symbol: string
 }
@@ -28,6 +95,14 @@ interface SniperInsightsTabProps {
 export function SniperInsightsTab({ symbol }: SniperInsightsTabProps) {
   const [snipers, setSnipers] = useState<Sniper[]>([])
   const [loading, setLoading] = useState(true)
+  
+  // Pagination
+  const [page, setPage] = useState(1)
+  const rowsPerPage = 25
+
+  // Sorting
+  const [sortField, setSortField] = useState<SortField>('netPnL')
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc')
 
   useEffect(() => {
     fetchSnipers()
@@ -79,12 +154,26 @@ export function SniperInsightsTab({ symbol }: SniperInsightsTabProps) {
     }
   }
 
+  const handleSort = (field: SortField) => {
+    if (sortField === field) {
+      // If clicking the same field, toggle direction
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')
+    } else {
+      // If clicking a new field, set it as the sort field and default to desc
+      setSortField(field)
+      setSortDirection('desc')
+    }
+    // Reset to first page when sorting
+    setPage(1)
+  }
+
   const formatAddress = (address: string) => {
     return `${address.slice(0, 6)}...${address.slice(-4)}`
   }
 
   const formatDate = (timestamp: string) => {
-    return new Date(timestamp).toLocaleDateString()
+    const date = new Date(timestamp)
+    return date.toLocaleString() // Shows both date and time in user's locale
   }
 
   // Calculate KPIs
@@ -107,6 +196,21 @@ export function SniperInsightsTab({ symbol }: SniperInsightsTabProps) {
       wallet: formatAddress(sniper.wallet),
       netPnL: sniper.netPnL + sniper.unrealizedPnL,
     }))
+
+  // Sort and paginate data
+  const sortedData = snipers.slice().sort((a, b) => {
+    const aValue = a[sortField]
+    const bValue = b[sortField]
+    
+    if (sortDirection === 'asc') {
+      return aValue > bValue ? 1 : -1
+    } else {
+      return aValue < bValue ? 1 : -1
+    }
+  })
+
+  const pageCount = Math.ceil(sortedData.length / rowsPerPage)
+  const pageData = sortedData.slice((page - 1) * rowsPerPage, page * rowsPerPage)
 
   return (
     <div className="space-y-6">
@@ -165,32 +269,47 @@ export function SniperInsightsTab({ symbol }: SniperInsightsTabProps) {
         </CardHeader>
         <CardContent>
           <ResponsiveContainer width="100%" height={400}>
-            <BarChart data={top5Snipers}>
+            <BarChart 
+              data={top5Snipers}
+              margin={{ top: 24, right: 32, left: 32, bottom: 64 }}
+              barCategoryGap="15%"
+            >
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis
                 dataKey="wallet"
+                angle={-30}
+                textAnchor="end"
+                interval={0}
                 label={{
                   value: 'Wallet',
                   position: 'insideBottom',
-                  dy: 10,
-                  textAnchor: 'middle',
-                  style: { fontWeight: 500 }
+                  dy: 40,
+                  offset: -10,
+                  fontWeight: 500,
+                  style: { textAnchor: 'middle', fontWeight: 500 }
                 }}
+                style={{ fontSize: '12px' }}
               />
               <YAxis
                 label={{
-                  value: 'Net PnL (In USD)',
+                  value: 'Net PnL (USD)',
                   angle: -90,
                   position: 'insideLeft',
-                  dx: -10,
-                  textAnchor: 'middle',
-                  style: { fontWeight: 500 }
+                  offset: 5,
+                  fontWeight: 500,
+                  dy: -10,
+                  style: { textAnchor: 'middle', fontWeight: 500 }
                 }}
+                tickFormatter={(v) => v.toLocaleString()}
+                style={{ fontSize: '12px' }}
               />
-              <Tooltip formatter={(value) => [`$${Number(value).toFixed(2)}`, "Net PnL"]} />
-              <Bar dataKey="netPnL">
+              <Tooltip 
+                formatter={(value) => [`$${Number(value).toFixed(2)}`, "Net PnL"]}
+                labelFormatter={(label) => `${label}`}
+              />
+              <Bar dataKey="netPnL" fill="#009688" radius={[4, 4, 0, 0]}>
                 {top5Snipers.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={entry.netPnL >= 0 ? '#22c55e' : '#ef4444'} />
+                  <Cell key={`cell-${index}`} fill={entry.netPnL >= 0 ? '#009688' : '#B71C1C'} />
                 ))}
               </Bar>
             </BarChart>
@@ -204,43 +323,91 @@ export function SniperInsightsTab({ symbol }: SniperInsightsTabProps) {
           <CardTitle>Sniper Summary</CardTitle>
           {/* <CardDescription>Top 50 traders by Net PnL</CardDescription> */}
         </CardHeader>
-        <CardContent>
+                <CardContent>
           <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Wallet</TableHead>
-                  <TableHead>Net PnL</TableHead>
-                  <TableHead>Unrealized PnL</TableHead>
-                  <TableHead>Tokens Left</TableHead>
-                  <TableHead>Buy Count</TableHead>
-                  <TableHead>Sell Count</TableHead>
-                  <TableHead>Avg Buy Price</TableHead>
-                  <TableHead>Avg Sell Price</TableHead>
-                  <TableHead>Tax</TableHead>
-                  <TableHead>Fees</TableHead>
-                  <TableHead>First Buy</TableHead>
-                  <TableHead>Last Sell</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {loading
-                  ? [...Array(10)].map((_, i) => (
-                      <TableRow key={i}>
-                        {[...Array(12)].map((_, j) => (
-                          <TableCell key={j}>
-                            <div className="h-4 bg-muted rounded animate-pulse"></div>
-                          </TableCell>
-                        ))}
-                      </TableRow>
-                    ))
-                  : snipers
-                      .slice()
-                      .sort((a, b) => b.netPnL + b.unrealizedPnL - (a.netPnL + a.unrealizedPnL))
-                      .slice(0, 50)
-                      .map((sniper, index) => (
+            <div className="max-h-[600px] overflow-y-auto">
+              <Table>
+                <TableHeader className="sticky top-0 bg-background z-10">
+                  <TableRow>
+                    <TableHead>Wallet</TableHead>
+                    <SortableHeader 
+                      field="netPnL" 
+                      currentSort={sortField} 
+                      currentDirection={sortDirection} 
+                      onSort={handleSort}
+                    >
+                      Net PnL
+                    </SortableHeader>
+                    <SortableHeader 
+                      field="unrealizedPnL" 
+                      currentSort={sortField} 
+                      currentDirection={sortDirection} 
+                      onSort={handleSort}
+                    >
+                      Unrealized PnL
+                    </SortableHeader>
+                    <SortableHeader 
+                      field="tokensLeft" 
+                      currentSort={sortField} 
+                      currentDirection={sortDirection} 
+                      onSort={handleSort}
+                    >
+                      Tokens Left
+                    </SortableHeader>
+                    <TableHead>Buy Count</TableHead>
+                    <TableHead>Sell Count</TableHead>
+                    <SortableHeader 
+                      field="avgBuyPrice" 
+                      currentSort={sortField} 
+                      currentDirection={sortDirection} 
+                      onSort={handleSort}
+                    >
+                      Avg Buy Price
+                    </SortableHeader>
+                    <SortableHeader 
+                      field="avgSellPrice" 
+                      currentSort={sortField} 
+                      currentDirection={sortDirection} 
+                      onSort={handleSort}
+                    >
+                      Avg Sell Price
+                    </SortableHeader>
+                    <SortableHeader 
+                      field="totalTax" 
+                      currentSort={sortField} 
+                      currentDirection={sortDirection} 
+                      onSort={handleSort}
+                    >
+                      Tax
+                    </SortableHeader>
+                    <SortableHeader 
+                      field="totalFees" 
+                      currentSort={sortField} 
+                      currentDirection={sortDirection} 
+                      onSort={handleSort}
+                    >
+                      Fees
+                    </SortableHeader>
+                    <TableHead>First Buy</TableHead>
+                    <TableHead>Last Sell</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {loading
+                    ? [...Array(10)].map((_, i) => (
+                        <TableRow key={i}>
+                          {[...Array(12)].map((_, j) => (
+                            <TableCell key={j}>
+                              <div className="h-4 bg-muted rounded animate-pulse"></div>
+                            </TableCell>
+                          ))}
+                        </TableRow>
+                      ))
+                    : pageData.map((sniper, index) => (
                         <TableRow key={index}>
-                          <TableCell className="font-mono text-xs">{formatAddress(sniper.wallet)}</TableCell>
+                          <TableCell className="font-mono text-xs">
+                            <CopyableCell value={sniper.wallet} display={formatAddress(sniper.wallet)} />
+                          </TableCell>
                           <TableCell
                             className={`text-right font-medium ${
                               sniper.netPnL >= 0 ? "text-green-600" : "text-red-600"
@@ -260,8 +427,8 @@ export function SniperInsightsTab({ symbol }: SniperInsightsTabProps) {
                           <TableCell className="text-center">{sniper.sellCount}</TableCell>
                           <TableCell className="text-right">${sniper.avgBuyPrice.toFixed(6)}</TableCell>
                           <TableCell className="text-right">${sniper.avgSellPrice.toFixed(6)}</TableCell>
-                          <TableCell className="text-right">${sniper.totalTax.toFixed(4)}</TableCell>
-                          <TableCell className="text-right">${sniper.totalFees.toFixed(4)}</TableCell>
+                          <TableCell className="text-right">{sniper.totalTax.toFixed(4)}</TableCell>
+                          <TableCell className="text-right">{sniper.totalFees.toFixed(4)}</TableCell>
                           <TableCell className="text-xs">
                             {sniper.firstBuyTime ? formatDate(sniper.firstBuyTime) : "N/A"}
                           </TableCell>
@@ -270,9 +437,38 @@ export function SniperInsightsTab({ symbol }: SniperInsightsTabProps) {
                           </TableCell>
                         </TableRow>
                       ))}
-              </TableBody>
-            </Table>
+                </TableBody>
+              </Table>
+            </div>
           </div>
+          {/* Pagination Controls */}
+          {pageCount > 1 && (
+            <div className="flex gap-2 mt-4 justify-end items-center">
+              <button
+                disabled={page === 1}
+                onClick={() => setPage(1)}
+                className="px-2 py-1 rounded bg-muted hover:bg-accent disabled:opacity-50"
+              >First</button>
+              <button
+                disabled={page === 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                className="px-2 py-1 rounded bg-muted hover:bg-accent disabled:opacity-50"
+              >Previous</button>
+              <span>
+                Page {page} of {pageCount}
+              </span>
+              <button
+                disabled={page === pageCount}
+                onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
+                className="px-2 py-1 rounded bg-muted hover:bg-accent disabled:opacity-50"
+              >Next</button>
+              <button
+                disabled={page === pageCount}
+                onClick={() => setPage(pageCount)}
+                className="px-2 py-1 rounded bg-muted hover:bg-accent disabled:opacity-50"
+              >Last</button>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
