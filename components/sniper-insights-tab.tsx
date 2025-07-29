@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from "recharts"
-import { ChevronUp, ChevronDown, Info } from "lucide-react"
+import { ChevronUp, ChevronDown, Info, Loader2 } from "lucide-react"
 import {
   Tooltip as UITooltip,
   TooltipContent,
@@ -289,53 +289,105 @@ export function SniperInsightsTab({ symbol }: SniperInsightsTabProps) {
   return (
     <TooltipProvider>
       <div className="space-y-6">
-        {/* KPIs */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Snipers</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{totalSnipers}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Success Rate</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{successRate.toFixed(1)}%</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Token Held %</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{tokenHeldPercentage.toFixed(1)}%</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Realized PnL</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className={`text-2xl font-bold ${totalRealizedPnL >= 0 ? "text-green-600" : "text-red-600"}`}>
-              ${totalRealizedPnL.toFixed(2)}
+        {loading ? (
+          <>
+            {/* Centered Loading Spinner */}
+            <div className="flex items-center justify-center py-20">
+              <div className="flex flex-col items-center space-y-4">
+                <Loader2 className="h-12 w-12 animate-spin text-primary" />
+                <div className="text-lg font-medium text-muted-foreground">Loading Sniper Insights Data...</div>
+              </div>
             </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Unrealized PnL</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className={`text-2xl font-bold ${totalUnrealizedPnL >= 0 ? "text-green-600" : "text-red-600"}`}>
-              ${totalUnrealizedPnL.toFixed(2)}
+
+            {/* Loading KPIs */}
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+              {[...Array(5)].map((_, i) => (
+                <Card key={i}>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                    <div className="h-4 w-24 bg-muted rounded animate-pulse"></div>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="h-8 w-16 bg-muted rounded animate-pulse"></div>
+                  </CardContent>
+                </Card>
+              ))}
             </div>
-          </CardContent>
-        </Card>
-      </div>
+
+            {/* Loading Chart */}
+            <Card>
+              <CardHeader>
+                <div className="h-6 w-48 bg-muted rounded animate-pulse"></div>
+              </CardHeader>
+              <CardContent>
+                <div className="h-[400px] bg-muted rounded animate-pulse"></div>
+              </CardContent>
+            </Card>
+
+            {/* Loading Table */}
+            <Card>
+              <CardHeader>
+                <div className="h-6 w-32 bg-muted rounded animate-pulse"></div>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="rounded-md border">
+                    <div className="overflow-hidden">
+                      <div className="h-[600px] bg-muted rounded animate-pulse"></div>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </>
+        ) : (
+          <>
+            {/* KPIs */}
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Total Snipers</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{totalSnipers}</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Success Rate</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{successRate.toFixed(1)}%</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Token Held %</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{tokenHeldPercentage.toFixed(1)}%</div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Realized PnL</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className={`text-2xl font-bold ${totalRealizedPnL >= 0 ? "text-green-600" : "text-red-600"}`}>
+                  ${totalRealizedPnL.toFixed(2)}
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Unrealized PnL</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className={`text-2xl font-bold ${totalUnrealizedPnL >= 0 ? "text-green-600" : "text-red-600"}`}>
+                  ${totalUnrealizedPnL.toFixed(2)}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
 
       {/* Top 5 Snipers Chart */}
       <Card>
@@ -554,7 +606,9 @@ export function SniperInsightsTab({ symbol }: SniperInsightsTabProps) {
           )}
         </CardContent>
       </Card>
-    </div>
+          </>
+        )}
+      </div>
     </TooltipProvider>
   )
 }

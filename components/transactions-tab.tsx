@@ -15,7 +15,7 @@ import {
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line
 } from "recharts"
-import { Info } from "lucide-react"
+import { Info, Loader2 } from "lucide-react"
 
 interface TransactionsTabProps {
   symbol: string
@@ -517,42 +517,128 @@ export function TransactionsTab({ symbol }: TransactionsTabProps) {
   // --- Render ---
   return (
     <div className="space-y-6">
-      {/* KPIs */}
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium">Unique Traders</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold flex items-center">
-              {uniqueMakers}
-              <span role="img" aria-label="person" className="ml-2 text-lg">👤</span>
+      {loading ? (
+        <>
+          {/* Centered Loading Spinner */}
+          <div className="flex items-center justify-center py-20">
+            <div className="flex flex-col items-center space-y-4">
+              <Loader2 className="h-12 w-12 animate-spin text-primary" />
+              <div className="text-lg font-medium text-muted-foreground">Loading Transaction Data...</div>
             </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium">Buy Volume ($)</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold flex items-center text-green-600">
-              {buyVolumeUsd.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-              <span role="img" aria-label="money up" className="ml-2 text-lg">📈</span>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium">Sell Volume ($)</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold flex items-center text-red-600">
-              {sellVolumeUsd.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-              <span role="img" aria-label="money down" className="ml-2 text-lg">📉</span>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+          </div>
+
+          {/* Loading KPIs */}
+          <div className="grid gap-4 md:grid-cols-3">
+            {[...Array(3)].map((_, i) => (
+              <Card key={i}>
+                <CardHeader>
+                  <div className="h-4 w-32 bg-muted rounded animate-pulse"></div>
+                </CardHeader>
+                <CardContent>
+                  <div className="h-8 w-20 bg-muted rounded animate-pulse"></div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          {/* Loading Charts */}
+          <div className="grid gap-4 md:grid-cols-2">
+            {[...Array(2)].map((_, i) => (
+              <Card key={i}>
+                <CardHeader>
+                  <div className="h-6 w-40 bg-muted rounded animate-pulse"></div>
+                </CardHeader>
+                <CardContent>
+                  <div className="h-[400px] bg-muted rounded animate-pulse"></div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          {/* Loading Volume Chart */}
+          <Card>
+            <CardHeader>
+              <div className="h-6 w-48 bg-muted rounded animate-pulse"></div>
+            </CardHeader>
+            <CardContent>
+              <div className="h-[400px] bg-muted rounded animate-pulse"></div>
+            </CardContent>
+          </Card>
+
+          {/* Loading Filters */}
+          <Card>
+            <CardHeader>
+              <div className="h-6 w-32 bg-muted rounded animate-pulse"></div>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="flex flex-col md:flex-row md:items-center gap-4">
+                  {[...Array(3)].map((_, i) => (
+                    <div key={i} className="flex flex-col gap-1">
+                      <div className="h-4 w-24 bg-muted rounded animate-pulse"></div>
+                      <div className="h-10 w-40 bg-muted rounded animate-pulse"></div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Loading Table */}
+          <Card>
+            <CardHeader>
+              <div className="h-6 w-32 bg-muted rounded animate-pulse"></div>
+              <div className="h-4 w-60 bg-muted rounded animate-pulse"></div>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="rounded-md border">
+                  <div className="overflow-hidden">
+                    <div className="h-[600px] bg-muted rounded animate-pulse"></div>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </>
+      ) : (
+        <>
+          {/* KPIs */}
+          <div className="grid gap-4 md:grid-cols-3">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm font-medium">Unique Traders</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold flex items-center">
+                  {uniqueMakers}
+                  <span role="img" aria-label="person" className="ml-2 text-lg">👤</span>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm font-medium">Buy Volume ($)</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold flex items-center text-green-600">
+                  {buyVolumeUsd.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                  <span role="img" aria-label="money up" className="ml-2 text-lg">📈</span>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm font-medium">Sell Volume ($)</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold flex items-center text-red-600">
+                  {sellVolumeUsd.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                  <span role="img" aria-label="money down" className="ml-2 text-lg">📉</span>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
 
 
       {/* Charts */}
@@ -879,6 +965,8 @@ export function TransactionsTab({ symbol }: TransactionsTabProps) {
 
         </CardContent>
       </Card>
-    </div>
-  )
+          </>
+        )}
+      </div>
+    )
 }

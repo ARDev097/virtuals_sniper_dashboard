@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts"
-import { Copy, ChevronLeft, ChevronRight } from "lucide-react"
+import { Copy, ChevronLeft, ChevronRight, Loader2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
 interface GlobalSniper {
@@ -206,6 +206,86 @@ export default function GlobalSnipersPage() {
           <h2 className="text-3xl font-bold tracking-tight">Global Snipers</h2>
         </div>
       </div>
+
+      {loading ? (
+        <>
+          {/* Centered Loading Spinner */}
+          <div className="flex items-center justify-center py-20">
+            <div className="flex flex-col items-center space-y-4">
+              <Loader2 className="h-12 w-12 animate-spin text-primary" />
+              <div className="text-lg font-medium text-muted-foreground">Loading Global Snipers Data...</div>
+            </div>
+          </div>
+
+          {/* Loading KPIs */}
+          <div className="grid gap-4 md:grid-cols-3">
+            {[...Array(3)].map((_, i) => (
+              <Card key={i}>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <div className="h-4 w-32 bg-muted rounded animate-pulse"></div>
+                </CardHeader>
+                <CardContent>
+                  <div className="h-8 w-20 bg-muted rounded animate-pulse"></div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          {/* Loading Charts */}
+          <div className="grid gap-4 md:grid-cols-2">
+            {[...Array(2)].map((_, i) => (
+              <Card key={i}>
+                <CardHeader>
+                  <div className="h-6 w-40 bg-muted rounded animate-pulse"></div>
+                </CardHeader>
+                <CardContent>
+                  <div className="h-[400px] bg-muted rounded animate-pulse"></div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          {/* Loading Profit Distribution Chart */}
+          <div className="grid gap-4 md:grid-cols-1">
+            <Card>
+              <CardHeader>
+                <div className="h-6 w-40 bg-muted rounded animate-pulse"></div>
+              </CardHeader>
+              <CardContent>
+                <div className="h-[400px] bg-muted rounded animate-pulse"></div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Loading Search */}
+          <Card>
+            <CardHeader>
+              <div className="h-6 w-32 bg-muted rounded animate-pulse"></div>
+            </CardHeader>
+            <CardContent>
+              <div className="h-10 w-80 bg-muted rounded animate-pulse"></div>
+            </CardContent>
+          </Card>
+
+          {/* Loading Table */}
+          <Card>
+            <CardHeader>
+              <div className="h-6 w-40 bg-muted rounded animate-pulse"></div>
+              <div className="h-4 w-60 bg-muted rounded animate-pulse"></div>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="rounded-md border">
+                  <div className="overflow-hidden">
+                    <div className="h-[600px] bg-muted rounded animate-pulse"></div>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </>
+      ) : (
+        <>
 
       {/* KPIs */}
       <div className="grid gap-4 md:grid-cols-3">
@@ -478,6 +558,8 @@ export default function GlobalSnipersPage() {
           </div>
         </CardContent>
       </Card>
+        </>
+      )}
     </div>
   )
 }
