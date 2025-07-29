@@ -5,7 +5,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from "recharts"
-import { ChevronUp, ChevronDown } from "lucide-react"
+import { ChevronUp, ChevronDown, Info } from "lucide-react"
+import {
+  Tooltip as UITooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 
 interface Sniper {
   wallet: string
@@ -83,6 +89,74 @@ function SortableHeader({
         ) : (
           <div className="h-4 w-4" />
         )}
+      </div>
+    </TableHead>
+  )
+}
+
+// ---- Sortable Table Header with Info ----
+function SortableHeaderWithInfo({ 
+  children, 
+  field, 
+  currentSort, 
+  currentDirection, 
+  onSort,
+  tooltipText
+}: { 
+  children: React.ReactNode
+  field: SortField
+  currentSort: SortField | null
+  currentDirection: SortDirection
+  onSort: (field: SortField) => void
+  tooltipText: string
+}) {
+  const isActive = currentSort === field
+  
+  return (
+    <TableHead 
+      className="cursor-pointer hover:bg-muted/50 select-none"
+      onClick={() => onSort(field)}
+    >
+      <div className="flex items-center gap-1">
+        {children}
+        <UITooltip>
+          <TooltipTrigger asChild>
+            <Info className="h-3 w-3 text-muted-foreground hover:text-foreground" />
+          </TooltipTrigger>
+          <TooltipContent>
+            <p>{tooltipText}</p>
+          </TooltipContent>
+        </UITooltip>
+        {isActive && currentDirection === 'asc' ? (
+          <ChevronUp className="h-4 w-4" />
+        ) : (
+          <div className="h-4 w-4" />
+        )}
+      </div>
+    </TableHead>
+  )
+}
+
+// ---- Table Header with Info ----
+function HeaderWithInfo({ 
+  children, 
+  tooltipText 
+}: { 
+  children: React.ReactNode
+  tooltipText: string
+}) {
+  return (
+    <TableHead>
+      <div className="flex items-center gap-1">
+        {children}
+        <UITooltip>
+          <TooltipTrigger asChild>
+            <Info className="h-3 w-3 text-muted-foreground hover:text-foreground" />
+          </TooltipTrigger>
+          <TooltipContent>
+            <p>{tooltipText}</p>
+          </TooltipContent>
+        </UITooltip>
       </div>
     </TableHead>
   )
@@ -213,9 +287,10 @@ export function SniperInsightsTab({ symbol }: SniperInsightsTabProps) {
   const pageData = sortedData.slice((page - 1) * rowsPerPage, page * rowsPerPage)
 
   return (
-    <div className="space-y-6">
-      {/* KPIs */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+    <TooltipProvider>
+      <div className="space-y-6">
+        {/* KPIs */}
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Snipers</CardTitle>
@@ -356,40 +431,48 @@ export function SniperInsightsTab({ symbol }: SniperInsightsTabProps) {
                     </SortableHeader>
                     <TableHead>Buy Count</TableHead>
                     <TableHead>Sell Count</TableHead>
-                    <SortableHeader 
+                    <SortableHeaderWithInfo 
                       field="avgBuyPrice" 
                       currentSort={sortField} 
                       currentDirection={sortDirection} 
                       onSort={handleSort}
+                      tooltipText={`The average USD price at which the user bought ${symbol}.`}
                     >
                       Avg Buy Price
-                    </SortableHeader>
-                    <SortableHeader 
+                    </SortableHeaderWithInfo>
+                    <SortableHeaderWithInfo 
                       field="avgSellPrice" 
                       currentSort={sortField} 
                       currentDirection={sortDirection} 
                       onSort={handleSort}
+                      tooltipText={`The average USD price at which the user sold ${symbol}.`}
                     >
                       Avg Sell Price
-                    </SortableHeader>
-                    <SortableHeader 
+                    </SortableHeaderWithInfo>
+                    <SortableHeaderWithInfo 
                       field="totalTax" 
                       currentSort={sortField} 
                       currentDirection={sortDirection} 
                       onSort={handleSort}
+                      tooltipText={`Total ${symbol} paid as tax across all transactions by the sniper.`}
                     >
                       Tax
-                    </SortableHeader>
-                    <SortableHeader 
+                    </SortableHeaderWithInfo>
+                    <SortableHeaderWithInfo 
                       field="totalFees" 
                       currentSort={sortField} 
                       currentDirection={sortDirection} 
                       onSort={handleSort}
+                      tooltipText="Total ETH spent as fees on all transactions by the sniper."
                     >
                       Fees
-                    </SortableHeader>
-                    <TableHead>First Buy</TableHead>
-                    <TableHead>Last Sell</TableHead>
+                    </SortableHeaderWithInfo>
+                    <HeaderWithInfo tooltipText="Timestamp of the sniper's first purchase of the token.">
+                      First Buy
+                    </HeaderWithInfo>
+                    <HeaderWithInfo tooltipText="Timestamp of the sniper's most recent sale of the token.">
+                      Last Sell
+                    </HeaderWithInfo>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -472,6 +555,7 @@ export function SniperInsightsTab({ symbol }: SniperInsightsTabProps) {
         </CardContent>
       </Card>
     </div>
+    </TooltipProvider>
   )
 }
 

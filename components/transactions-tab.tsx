@@ -15,6 +15,7 @@ import {
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line
 } from "recharts"
+import { Info } from "lucide-react"
 
 interface TransactionsTabProps {
   symbol: string
@@ -82,10 +83,10 @@ function CopyableCell({ value, display }: { value: string, display: string }) {
 function InfoIcon({ tooltip }: { tooltip: string }) {
   return (
     <span 
-      className="inline-flex items-center justify-center w-5 h-5 ml-1 rounded-full bg-gray-200 hover:bg-gray-300 transition-all duration-200 cursor-help border border-gray-300"
+      className="inline-flex items-center ml-1 cursor-help"
       title={tooltip}
     >
-      <span className="text-xs font-medium text-gray-700">i</span>
+      <Info className="h-3 w-3 text-muted-foreground hover:text-foreground" />
     </span>
   )
 }
