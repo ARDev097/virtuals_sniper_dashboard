@@ -5,9 +5,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { Separator } from "@/components/ui/separator"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts"
+import { Copy, ChevronLeft, ChevronRight } from "lucide-react"
+import { useToast } from "@/hooks/use-toast"
 
 interface GlobalSniper {
   wallet: string
@@ -18,9 +21,10 @@ interface GlobalSniper {
   tokensLeft: number
   buyCount: number
   sellCount: number
-  firstTxn: string
-  lastTxn: string
-  avgPrice: number
+  firstBuyTime: string | null
+  lastSellTime: string | null
+  avgBuyPrice: number
+  avgSellPrice: number
   totalTax: number
   totalFees: number
 }
@@ -30,6 +34,8 @@ export default function GlobalSnipersPage() {
   const [filteredSnipers, setFilteredSnipers] = useState<GlobalSniper[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
+  const [currentPage, setCurrentPage] = useState(1)
+  const { toast } = useToast()
 
   useEffect(() => {
     fetchGlobalSnipers()
@@ -37,6 +43,7 @@ export default function GlobalSnipersPage() {
 
   useEffect(() => {
     filterSnipers()
+    setCurrentPage(1) // Reset to first page when search changes
   }, [snipers, searchTerm])
 
   const fetchGlobalSnipers = async () => {
@@ -60,9 +67,10 @@ export default function GlobalSnipersPage() {
           tokensLeft: 100000,
           buyCount: 3,
           sellCount: 1,
-          firstTxn: "2024-01-15T10:31:00Z",
-          lastTxn: "2024-01-15T11:45:00Z",
-          avgPrice: 0.025,
+          firstBuyTime: "2024-01-15T10:31:00Z",
+          lastSellTime: "2024-01-15T11:45:00Z",
+          avgBuyPrice: 0.025,
+          avgSellPrice: 0.035,
           totalTax: 15.5,
           totalFees: 8.25,
         },
@@ -75,9 +83,10 @@ export default function GlobalSnipersPage() {
           tokensLeft: 0,
           buyCount: 2,
           sellCount: 2,
-          firstTxn: "2024-01-15T10:35:00Z",
-          lastTxn: "2024-01-15T12:20:00Z",
-          avgPrice: 0.03,
+          firstBuyTime: "2024-01-15T10:35:00Z",
+          lastSellTime: "2024-01-15T12:20:00Z",
+          avgBuyPrice: 0.03,
+          avgSellPrice: 0.028,
           totalTax: 20.0,
           totalFees: 12.75,
         },
@@ -101,9 +110,37 @@ export default function GlobalSnipersPage() {
     return `${address.slice(0, 6)}...${address.slice(-4)}`
   }
 
-  const formatDate = (timestamp: string) => {
-    return new Date(timestamp).toLocaleDateString()
+  const formatDate = (timestamp: string | null) => {
+    if (!timestamp) return "N/A"
+    try {
+      return new Date(timestamp).toLocaleString()
+    } catch (error) {
+      return "N/A"
+    }
   }
+
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      toast({
+        title: "Copied!",
+        description: "Address copied to clipboard",
+      })
+    } catch (err) {
+      toast({
+        title: "Error",
+        description: "Failed to copy to clipboard",
+        variant: "destructive",
+      })
+    }
+  }
+
+  // Pagination logic
+  const ITEMS_PER_PAGE = 25
+  const totalPages = Math.ceil(filteredSnipers.length / ITEMS_PER_PAGE)
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE
+  const endIndex = startIndex + ITEMS_PER_PAGE
+  const currentSnipers = filteredSnipers.slice(startIndex, endIndex)
 
   // Calculate KPIs
   const totalUniqueSnipers = new Set(snipers.map((s) => s.wallet)).size
@@ -196,19 +233,24 @@ export default function GlobalSnipersPage() {
       </div>
 
       {/* Charts */}
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle>Top 10 Snipers</CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={top10Snipers}>
+            <ResponsiveContainer width="100%" height={400}>
+              <BarChart data={top10Snipers} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="wallet" />
-                <YAxis />
+                <XAxis 
+                  dataKey="wallet" 
+                  label={{ value: "Wallet Address", position: "bottom", offset: 0, style: { textAnchor: "middle" } }}
+                />
+                <YAxis 
+                  label={{ value: "Net PnL ($)", angle: -90, position: "left", offset: 0, style: { textAnchor: "middle" } }}
+                />
                 <Tooltip formatter={(value) => [`$${Number(value).toFixed(2)}`, "Net PnL"]} />
-                <Bar dataKey="netPnL" fill="#8884d8" />
+                <Bar dataKey="netPnL" fill="#3b82f6" />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
@@ -219,30 +261,43 @@ export default function GlobalSnipersPage() {
             <CardTitle>Tokens with Most Sniper Activity</CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={topTokens}>
+            <ResponsiveContainer width="100%" height={400}>
+              <BarChart data={topTokens} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="token" />
-                <YAxis />
+                <XAxis 
+                  dataKey="token" 
+                  label={{ value: "Token Symbol", position: "bottom", offset: 0, style: { textAnchor: "middle" } }}
+                />
+                <YAxis 
+                  label={{ value: "Number of Snipers", angle: -90, position: "left", offset: 0, style: { textAnchor: "middle" } }}
+                />
                 <Tooltip />
-                <Bar dataKey="count" fill="#82ca9d" />
+                <Bar dataKey="count" fill="#10b981" />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>
+      </div>
 
+      {/* Profit Distribution Chart */}
+      <div className="grid gap-4 md:grid-cols-1">
         <Card>
           <CardHeader>
             <CardTitle>Profit Distribution</CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={profitDistribution}>
+            <ResponsiveContainer width="100%" height={400}>
+              <BarChart data={profitDistribution} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="range" />
-                <YAxis />
+                <XAxis 
+                  dataKey="range" 
+                  label={{ value: "Profit Range", position: "bottom", offset: 0, style: { textAnchor: "middle" } }}
+                />
+                <YAxis 
+                  label={{ value: "Number of Snipers", angle: -90, position: "left", offset: 0, style: { textAnchor: "middle" } }}
+                />
                 <Tooltip />
-                <Bar dataKey="count" fill="#ffc658" />
+                <Bar dataKey="count" fill="#f59e0b" />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
@@ -273,88 +328,123 @@ export default function GlobalSnipersPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Sr No</TableHead>
-                  <TableHead>Wallet</TableHead>
-                  <TableHead>Token</TableHead>
-                  <TableHead>Net PnL</TableHead>
-                  <TableHead>Unrealized PnL</TableHead>
-                  <TableHead>Remaining Tokens</TableHead>
-                  <TableHead>Buy/Sell Txns</TableHead>
-                  <TableHead>First Txn</TableHead>
-                  <TableHead>Last Txn</TableHead>
-                  <TableHead>Avg Price</TableHead>
-                  <TableHead>Tax</TableHead>
-                  <TableHead>Fees</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {loading
-                  ? [...Array(10)].map((_, i) => (
-                      <TableRow key={i}>
-                        {[...Array(12)].map((_, j) => (
-                          <TableCell key={j}>
-                            <div className="h-4 bg-muted rounded animate-pulse"></div>
-                          </TableCell>
-                        ))}
-                      </TableRow>
-                    ))
-                  : filteredSnipers
-                      .sort((a, b) => b.realizedPnL + b.unrealizedPnL - (a.realizedPnL + a.unrealizedPnL))
-                      .slice(0, 100)
-                      .map((sniper, index) => (
-                        <TableRow key={`${sniper.wallet}-${sniper.token}`}>
-                          <TableCell className="font-medium">{index + 1}</TableCell>
-                          <TableCell className="font-mono text-xs">{formatAddress(sniper.wallet)}</TableCell>
-                          <TableCell>
-                            <div className="flex flex-col">
-                              <Badge variant="outline" className="text-xs mb-1">
+          <div className="space-y-4">
+            <div className="rounded-md border">
+              <div className="overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Wallet</TableHead>
+                      <TableHead>Token</TableHead>
+                      <TableHead>Net PnL</TableHead>
+                      <TableHead>Unrealized PnL</TableHead>
+                      <TableHead>Remaining Tokens</TableHead>
+                      <TableHead>Buy Txns</TableHead>
+                      <TableHead>Sell Txns</TableHead>
+                      <TableHead>First Txn</TableHead>
+                      <TableHead>Last Txn</TableHead>
+                      <TableHead>Avg Buy Price</TableHead>
+                      <TableHead>Avg Sell Price</TableHead>
+                      <TableHead>Tax</TableHead>
+                      <TableHead>Fees</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {loading
+                      ? [...Array(25)].map((_, i) => (
+                          <TableRow key={i}>
+                            {[...Array(12)].map((_, j) => (
+                              <TableCell key={j}>
+                                <div className="h-4 bg-muted rounded animate-pulse"></div>
+                              </TableCell>
+                            ))}
+                          </TableRow>
+                        ))
+                      : currentSnipers
+                          .sort((a, b) => b.realizedPnL + b.unrealizedPnL - (a.realizedPnL + a.unrealizedPnL))
+                          .map((sniper, index) => (
+                            <TableRow key={`${sniper.wallet}-${sniper.token}`}>
+                              <TableCell className="font-mono text-xs">
+                                <div className="flex items-center gap-2">
+                                  <span>{formatAddress(sniper.wallet)}</span>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-6 w-6 p-0"
+                                    onClick={() => copyToClipboard(sniper.wallet)}
+                                  >
+                                    <Copy className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-xs font-medium">
                                 {sniper.token}
-                              </Badge>
-                              <span className="text-xs text-muted-foreground">{sniper.tokenName}</span>
-                            </div>
-                          </TableCell>
-                          <TableCell
-                            className={`text-right font-medium ${
-                              sniper.realizedPnL >= 0 ? "text-green-600" : "text-red-600"
-                            }`}
-                          >
-                            ${sniper.realizedPnL.toFixed(2)}
-                          </TableCell>
-                          <TableCell
-                            className={`text-right font-medium ${
-                              sniper.unrealizedPnL >= 0 ? "text-green-600" : "text-red-600"
-                            }`}
-                          >
-                            ${sniper.unrealizedPnL.toFixed(2)}
-                          </TableCell>
-                          <TableCell className="text-right">{sniper.tokensLeft.toLocaleString()}</TableCell>
-                          <TableCell className="text-center">
-                            <div className="flex gap-1">
-                              <Badge variant="outline" className="text-xs">
-                                B: {sniper.buyCount}
-                              </Badge>
-                              <Badge variant="outline" className="text-xs">
-                                S: {sniper.sellCount}
-                              </Badge>
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-xs">
-                            {sniper.firstTxn ? formatDate(sniper.firstTxn) : "N/A"}
-                          </TableCell>
-                          <TableCell className="text-xs">
-                            {sniper.lastTxn ? formatDate(sniper.lastTxn) : "N/A"}
-                          </TableCell>
-                          <TableCell className="text-right">${(sniper.avgPrice ?? 0).toFixed(6)}</TableCell>
-                          <TableCell className="text-right">${(sniper.totalTax ?? 0).toFixed(4)}</TableCell>
-                          <TableCell className="text-right">${(sniper.totalFees ?? 0).toFixed(4)}</TableCell>
-                        </TableRow>
-                      ))}
-              </TableBody>
-            </Table>
+                              </TableCell>
+                              <TableCell
+                                className={`text-right font-medium ${
+                                  sniper.realizedPnL >= 0 ? "text-green-600" : "text-red-600"
+                                }`}
+                              >
+                                ${sniper.realizedPnL.toFixed(2)}
+                              </TableCell>
+                              <TableCell
+                                className={`text-right font-medium ${
+                                  sniper.unrealizedPnL >= 0 ? "text-green-600" : "text-red-600"
+                                }`}
+                              >
+                                ${sniper.unrealizedPnL.toFixed(2)}
+                              </TableCell>
+                              <TableCell className="text-right">{sniper.tokensLeft.toLocaleString()}</TableCell>
+                              <TableCell className="text-center">{sniper.buyCount}</TableCell>
+                              <TableCell className="text-center">{sniper.sellCount}</TableCell>
+                              <TableCell className="text-xs">
+                                {formatDate(sniper.firstBuyTime)}
+                              </TableCell>
+                              <TableCell className="text-xs">
+                                {formatDate(sniper.lastSellTime)}
+                              </TableCell>
+                              <TableCell className="text-right">${(sniper.avgBuyPrice ?? 0).toFixed(6)}</TableCell>
+                              <TableCell className="text-right">${(sniper.avgSellPrice ?? 0).toFixed(6)}</TableCell>
+                              <TableCell className="text-right">{(sniper.totalTax ?? 0).toFixed(4)}</TableCell>
+                              <TableCell className="text-right">{(sniper.totalFees ?? 0).toFixed(4)}</TableCell>
+                            </TableRow>
+                          ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+
+            {/* Pagination */}
+            {!loading && totalPages > 1 && (
+              <div className="flex items-center justify-between">
+                <div className="text-sm text-muted-foreground">
+                  Showing {startIndex + 1} to {Math.min(endIndex, filteredSnipers.length)} of {filteredSnipers.length} results
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(currentPage - 1)}
+                    disabled={currentPage === 1}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                    Previous
+                  </Button>
+                  <div className="text-sm">
+                    Page {currentPage} of {totalPages}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(currentPage + 1)}
+                    disabled={currentPage === totalPages}
+                  >
+                    Next
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
