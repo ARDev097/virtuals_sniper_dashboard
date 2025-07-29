@@ -110,6 +110,10 @@ export default function GlobalSnipersPage() {
     return `${address.slice(0, 6)}...${address.slice(-4)}`
   }
 
+  const formatShortAddress = (address: string) => {
+    return `${address.slice(0, 4)}...${address.slice(-3)}`
+  }
+
   const formatDate = (timestamp: string | null) => {
     if (!timestamp) return "N/A"
     try {
@@ -153,6 +157,9 @@ export default function GlobalSnipersPage() {
     .slice(0, 10)
     .map((sniper) => ({
       wallet: formatAddress(sniper.wallet),
+      fullWallet: sniper.wallet,
+      token: sniper.token,
+      tokenName: sniper.tokenName,
       netPnL: sniper.realizedPnL + sniper.unrealizedPnL,
     }))
 
@@ -240,16 +247,39 @@ export default function GlobalSnipersPage() {
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={400}>
-              <BarChart data={top10Snipers} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
+              <BarChart data={top10Snipers} margin={{ top: 20, right: 30, left: 20, bottom: 30 }}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis 
                   dataKey="wallet" 
                   label={{ value: "Wallet Address", position: "bottom", offset: 0, style: { textAnchor: "middle" } }}
+                  tickFormatter={formatShortAddress}
+                  tick={{ fontSize: 10 }}
+                  interval={0}
                 />
                 <YAxis 
                   label={{ value: "Net PnL ($)", angle: -90, position: "left", offset: 0, style: { textAnchor: "middle" } }}
                 />
-                <Tooltip formatter={(value) => [`$${Number(value).toFixed(2)}`, "Net PnL"]} />
+                <Tooltip 
+                  formatter={(value, name, props) => {
+                    const data = props.payload;
+                    return [
+                      `$${Number(value).toFixed(2)}`,
+                      "Net PnL"
+                    ];
+                  }}
+                  labelFormatter={(label, payload) => {
+                    if (payload && payload.length > 0) {
+                      const data = payload[0].payload;
+                      return (
+                        <div>
+                          <div><strong>Wallet:</strong> {data.fullWallet}</div>
+                          <div><strong>Token:</strong> {data.token} ({data.tokenName})</div>
+                        </div>
+                      );
+                    }
+                    return label;
+                  }}
+                />
                 <Bar dataKey="netPnL" fill="#3b82f6" />
               </BarChart>
             </ResponsiveContainer>
